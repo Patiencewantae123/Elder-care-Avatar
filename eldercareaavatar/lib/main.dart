@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-
-// Added missing imports for your social sign-in tools
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
 
 void main() {
   runApp(
@@ -38,7 +38,7 @@ class AppLocalizations {
       'nav_home': 'Home',
       'nav_dash': 'Dashboard',
       'nav_profile': 'Profile',
-      'avatar_greet': 'Hello!\nHow are you feeling today?',
+      'avatar_greet': 'Hello! How are you feeling today?',
       'btn_speak': 'Speak',
       'btn_type': 'Type Message',
       'btn_listen': 'Listen',
@@ -75,7 +75,7 @@ class AppLocalizations {
       'nav_home': '홈',
       'nav_dash': '대시보드',
       'nav_profile': '프로필',
-      'avatar_greet': '안녕하세요!\n오늘 기분은 어떠신가요?',
+      'avatar_greet': '안녕하세요! 오늘 기분은 어떠신가요?',
       'btn_speak': '말하기',
       'btn_type': '메시지 입력',
       'btn_listen': '듣기',
@@ -116,7 +116,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   Future<AppLocalizations> load(Locale locale) async => AppLocalizations(locale);
 
   @override
-  bool shouldReload(_AppLocalizationsDelegate old) => true; 
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
 // ================= LANGUAGE MANAGER (STATE) =================
@@ -146,7 +146,7 @@ class _LanguageManagerState extends State<LanguageManager> {
   Widget build(BuildContext context) {
     return _LanguageInheritedWidget(
       state: this,
-      currentLocale: _currentLocale, 
+      currentLocale: _currentLocale,
       child: widget.child,
     );
   }
@@ -155,16 +155,16 @@ class _LanguageManagerState extends State<LanguageManager> {
 class _LanguageInheritedWidget extends InheritedWidget {
   final _LanguageManagerState state;
   final Locale currentLocale;
-  
+
   const _LanguageInheritedWidget({
-    required this.state, 
-    required this.currentLocale, 
+    required this.state,
+    required this.currentLocale,
     required super.child,
   });
 
   @override
   bool updateShouldNotify(_LanguageInheritedWidget oldWidget) {
-    return oldWidget.currentLocale != currentLocale; 
+    return oldWidget.currentLocale != currentLocale;
   }
 }
 
@@ -184,14 +184,14 @@ class FontSizeManager extends StatefulWidget {
 }
 
 class _FontSizeManagerState extends State<FontSizeManager> {
-  FontSizePreset _currentPreset = FontSizePreset.medium;
+  FontSizePreset _currentPreset = FontSizePreset.large; // Default changed to large for elderly users
   FontSizePreset get currentPreset => _currentPreset;
 
   double getScaleFactor() {
     switch (_currentPreset) {
       case FontSizePreset.small: return 0.85;
       case FontSizePreset.medium: return 1.0;
-      case FontSizePreset.large: return 1.3;
+      case FontSizePreset.large: return 1.4;
     }
   }
 
@@ -205,7 +205,7 @@ class _FontSizeManagerState extends State<FontSizeManager> {
   Widget build(BuildContext context) {
     return _FontSizeInheritedWidget(
       state: this,
-      currentPreset: _currentPreset, 
+      currentPreset: _currentPreset,
       child: widget.child,
     );
   }
@@ -216,14 +216,14 @@ class _FontSizeInheritedWidget extends InheritedWidget {
   final FontSizePreset currentPreset;
 
   const _FontSizeInheritedWidget({
-    required this.state, 
-    required this.currentPreset, 
+    required this.state,
+    required this.currentPreset,
     required super.child,
   });
 
   @override
   bool updateShouldNotify(_FontSizeInheritedWidget oldWidget) {
-    return oldWidget.currentPreset != currentPreset; 
+    return oldWidget.currentPreset != currentPreset;
   }
 }
 
@@ -265,12 +265,20 @@ class ElderConnectApp extends StatelessWidget {
 }
 
 // ================= LOGIN PAGE =================
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  // Keeps track of the selected role ('senior' or 'guardian')
+  String _selectedRole = 'senior'; 
 
   Future<void> _handleGoogleSignIn(BuildContext context) async {
     try {
-      debugPrint("Attempting Google Sign-In...");
+      debugPrint("Attempting Google Sign-In as $_selectedRole...");
       if (context.mounted) {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
       }
@@ -281,7 +289,7 @@ class LoginPage extends StatelessWidget {
 
   Future<void> _handleKakaoSignIn(BuildContext context) async {
     try {
-      debugPrint("Attempting Kakao Sign-In...");
+      debugPrint("Attempting Kakao Sign-In as $_selectedRole...");
       if (context.mounted) {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
       }
@@ -292,13 +300,86 @@ class LoginPage extends StatelessWidget {
 
   Future<void> _handleNaverSignIn(BuildContext context) async {
     try {
-      debugPrint("Attempting Naver Sign-In...");
+      debugPrint("Attempting Naver Sign-In as $_selectedRole...");
       if (context.mounted) {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
       }
     } catch (error) {
       debugPrint("Naver Sign In Failed: $error");
     }
+  }
+
+  /// Opens a workflow selection sheet specifically for registering new credentials
+  void _showSignUpSheet(BuildContext context, String seniorLabel, String guardianLabel) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Sign Up / 회원가입",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Choose your profile type to begin configuration",
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+              const SizedBox(height: 25),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade50,
+                        foregroundColor: Colors.green.shade900,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 0,
+                        side: BorderSide(color: Colors.green.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                      icon: const Icon(Icons.elderly, size: 28),
+                      label: Text(seniorLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        debugPrint("Navigating to Senior Signup form...");
+                        // TODO: Add your custom navigation target to your Senior Sign Up page form here
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade50,
+                        foregroundColor: Colors.blue.shade900,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 0,
+                        side: BorderSide(color: Colors.blue.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                      icon: const Icon(Icons.family_restroom, size: 28),
+                      label: Text(guardianLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        debugPrint("Navigating to Guardian Signup form...");
+                        // TODO: Add your custom navigation target to your Guardian Sign Up page form here
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _socialLoginButton({
@@ -329,9 +410,39 @@ class LoginPage extends StatelessWidget {
     );
   }
 
+  Widget _buildRoleSegmentButton({
+    required String roleKey,
+    required String title,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedRole == roleKey;
+    return Expanded(
+      child: OutlinedButton.icon(
+        icon: Icon(icon, color: isSelected ? Colors.white : Colors.green),
+        label: Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          backgroundColor: isSelected ? Colors.green : Colors.transparent,
+          foregroundColor: isSelected ? Colors.white : Colors.green,
+          side: const BorderSide(color: Colors.green, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        onPressed: () {
+          setState(() {
+            _selectedRole = roleKey;
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final local = AppLocalizations.of(context);
+    
+    // Fallback localization handlers
+    final seniorText = local.translate('role_senior').isEmpty ? "Senior" : local.translate('role_senior');
+    final guardianText = local.translate('role_guardian').isEmpty ? "Guardian" : local.translate('role_guardian');
 
     return Scaffold(
       body: Padding(
@@ -350,7 +461,26 @@ class LoginPage extends StatelessWidget {
                   local.translate('title'),
                   style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 25),
+                
+                // ROLE SELECTION TABS
+                Row(
+                  children: [
+                    _buildRoleSegmentButton(
+                      roleKey: 'senior',
+                      title: seniorText,
+                      icon: Icons.elderly,
+                    ),
+                    const SizedBox(width: 12),
+                    _buildRoleSegmentButton(
+                      roleKey: 'guardian',
+                      title: guardianText,
+                      icon: Icons.family_restroom,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 25),
+                
                 TextField(
                   decoration: InputDecoration(
                     labelText: local.translate('email'),
@@ -373,6 +503,7 @@ class LoginPage extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
                     onPressed: () {
+                      debugPrint("Logging in as $_selectedRole");
                       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
                     },
                     child: Text(local.translate('login')),
@@ -423,6 +554,26 @@ class LoginPage extends StatelessWidget {
                   textColor: Colors.white,
                   icon: const Text("N", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 18)),
                   onPressed: () => _handleNaverSignIn(context),
+                ),
+                
+                // --- SIGN UP NAVIGATION ACTION FOOTER ---
+                const SizedBox(height: 25),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Don't have an account? ", style: TextStyle(color: Colors.black54)),
+                    GestureDetector(
+                      onTap: () => _showSignUpSheet(context, seniorText, guardianText),
+                      child: const Text(
+                        "Sign Up",
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -481,17 +632,60 @@ class _HomePageState extends State<HomePage> {
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
-  Widget card(String title, IconData icon) {
+  /// A highly visual, touch-friendly card that presents actionable data metrics.
+  Widget _buildInformativeCard({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required Widget statusWidget,
+    required VoidCallback onTap,
+    Color accentColor = Colors.green,
+    bool isAlert = false,
+  }) {
     return Card(
-      child: SizedBox(
-        height: 100,
-        child: Center(
+      elevation: isAlert ? 5 : 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: accentColor.withOpacity(0.15),
+        child: Container(
+          decoration: isAlert
+              ? BoxDecoration(
+                  border: Border.all(color: Colors.red.shade300, width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.red.shade50,
+                )
+              : null,
+          padding: const EdgeInsets.all(16),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, size: 35, color: Colors.green),
-              const SizedBox(height: 8),
-              Text(title),
+              Row(
+                children: [
+                  Icon(icon, size: 28, color: isAlert ? Colors.red : accentColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isAlert ? Colors.red.shade900 : Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Center(child: statusWidget),
+                ),
+              ),
             ],
           ),
         ),
@@ -499,31 +693,215 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
+  void _navigateToFeature(BuildContext context, String featureName) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$featureName metric opened.'),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _triggerEmergencySystem(BuildContext context, dynamic local) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.gpp_maybe, size: 50, color: Colors.red),
+        title: Text(
+          local.translate('card_emer'), 
+          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          "Connecting to 911 dispatch and notifying your designated caregiver immediately...",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 18),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          SizedBox(
+            width: 140,
+            height: 50,
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+              child: Text(local.translate('cancel'), style: const TextStyle(color: Colors.red)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final local = AppLocalizations.of(context);
+    
+    bool isKo = false;
+    try {
+      isKo = Localizations.localeOf(context).languageCode == 'ko';
+    } catch (_) {}
 
     return Padding(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(12),
       child: GridView.count(
         crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.95,
         children: [
-          card(local.translate('card_med'), Icons.medication),
-          card(local.translate('card_health'), Icons.favorite),
-          card(local.translate('card_maps'), Icons.map),
-          card(local.translate('card_comm'), Icons.groups),
-          card(local.translate('card_emer'), Icons.warning),
-          card(local.translate('card_care'), Icons.family_restroom),
+          // 1. MEDICATION TRACKER
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_med'),
+            icon: Icons.medication,
+            accentColor: Colors.purple,
+            onTap: () => _navigateToFeature(context, local.translate('card_med')),
+            statusWidget: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  isKo ? "오후 1:00" : "1:00 PM",
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.purple),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isKo ? "혈압약 • 식후 30분" : "Blood Pressure\nCapsule",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+
+          // 2. HEALTH METRICS
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_health'),
+            icon: Icons.favorite,
+            accentColor: Colors.teal,
+            onTap: () => _navigateToFeature(context, local.translate('card_health')),
+            statusWidget: Stack(
+              alignment: Alignment.center,
+              children: [
+                const SizedBox(
+                  width: 65,
+                  height: 65,
+                  child: CircularProgressIndicator(
+                    value: 0.72,
+                    strokeWidth: 8,
+                    backgroundColor: Colors.black12,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                  ),
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("72%", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text(isKo ? "걸음수" : "Steps", style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                  ],
+                )
+              ],
+            ),
+          ),
+
+          // 3. MAPS / AREA SAFETY
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_maps'),
+            icon: Icons.map,
+            accentColor: Colors.blue,
+            onTap: () => _navigateToFeature(context, local.translate('card_maps')),
+            statusWidget: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.gpp_good, color: Colors.blue, size: 30),
+                const SizedBox(height: 4),
+                Text(
+                  isKo ? "안심 구역 내 계심" : "Inside Safe Zone",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.blueGrey),
+                ),
+              ],
+            ),
+          ),
+
+          // 4. COMMUNITY EVENTS
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_comm'),
+            icon: Icons.groups,
+            accentColor: Colors.orange,
+            onTap: () => _navigateToFeature(context, local.translate('card_comm')),
+            statusWidget: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  isKo ? "내일 일정" : "Tomorrow",
+                  style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isKo ? "복지관 노래교실\n오전 10시" : "Senior Center\nSinging at 10 AM",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+
+          // 5. CAREGIVER BROADCASTS
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_care'),
+            icon: Icons.family_restroom,
+            accentColor: Colors.green,
+            onTap: () => _navigateToFeature(context, local.translate('card_care')),
+            statusWidget: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.green,
+                  child: Icon(Icons.mail, size: 16, color: Colors.white),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isKo ? "아들이 보낸 메시지\n\"저녁에 방문할게요\"" : "Son's Note:\n\"Visiting at 6pm!\"",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
+
+          // 6. EMERGENCY SYSTEM
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_emer'),
+            icon: Icons.warning,
+            isAlert: true,
+            onTap: () => _triggerEmergencySystem(context, local),
+            statusWidget: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.touch_app, color: Colors.red, size: 28),
+                const SizedBox(height: 4),
+                Text(
+                  isKo ? "긴급 호출\n(즉시 전송)" : "TAP TO CALL\nEMERGENCY",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.red),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
-
-// ================= AVATAR PAGE =================
-// ================= AVATAR PAGE (UPDATED WITH STATE & ENGINE CORES) =================
+// ================= AVATAR PAGE (INTEGRATED WITH STT & TTS) =================
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key});
 
@@ -537,46 +915,127 @@ class _AvatarPageState extends State<AvatarPage> {
   bool _isAvatarSpeaking = false;
   final TextEditingController _textController = TextEditingController();
 
+  // STT and TTS Native instances
+  final stt.SpeechToText _speechEngine = stt.SpeechToText();
+  final FlutterTts _ttsEngine = FlutterTts();
+
   @override
   void initState() {
     super.initState();
-    // Default initial greeting text
-    _avatarResponseText = "Hello!\nHow are you feeling today?";
+    // Use WidgetsBinding post frame callback to access localization safely once page builds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _triggerInitialGreeting();
+    });
   }
 
-  // --- CONNECTS TO YOUR COMPANION BACKEND ---
-  Future<void> _sendMessageToBackend(String userQuery) async {
-    if (userQuery.trim().isEmpty) return;
+  @override
+  void dispose() {
+    _ttsEngine.stop();
+    _speechEngine.stop();
+    _textController.dispose();
+    super.dispose();
+  }
 
+  // --- AUTOMATIC GREETING SPEECH ON ENTRANCE ---
+  void _triggerInitialGreeting() {
+    final local = AppLocalizations.of(context);
+    final currentLang = LanguageManager.of(context).currentLocale.languageCode;
+    
     setState(() {
-      _avatarResponseText = "..."; // Loading indicator
-      _isAvatarSpeaking = true;
+      _avatarResponseText = local.translate('avatar_greet');
     });
 
-    try {
-      // TODO: Replace this with your actual HTTP URL call to your Python/Node server
-      // final response = await http.post(
-      //   Uri.parse('https://your-backend-api.com/chat'),
-      //   body: jsonEncode({'userId': 'elderly_user_01', 'message': userQuery}),
-      // );
-      // Map data = jsonDecode(response.body);
-      
-      // Mocking a response with simulated long term memory recall
-      await Future.delayed(const Duration(seconds: 2));
-      
-      setState(() {
-        _avatarResponseText = "I remember you mentioned your knee was hurting yesterday. Is it feeling any better now after your rest?";
-        _isAvatarSpeaking = false;
-      });
-    } catch (e) {
-      setState(() {
-        _avatarResponseText = "I'm having trouble connecting right now. Let's try again.";
-        _isAvatarSpeaking = false;
-      });
+    _speakVoiceOutput(_avatarResponseText, currentLang);
+  }
+
+  // --- NATIVE TEXT TO SPEECH ENGINE INTERACTION ---
+  Future<void> _speakVoiceOutput(String text, String languageCode) async {
+    setState(() => _isAvatarSpeaking = true);
+    
+    // Explicitly target localized language engines
+    String ttsTargetLocale = languageCode == 'ko' ? 'ko-KR' : 'en-US';
+    
+    await _ttsEngine.setLanguage(ttsTargetLocale);
+    await _ttsEngine.setSpeechRate(0.4); // Slower, highly audible rhythm designed for seniors
+    await _ttsEngine.setPitch(1.0);
+    
+    await _ttsEngine.speak(text);
+
+    _ttsEngine.setCompletionHandler(() {
+      if (mounted) {
+        setState(() => _isAvatarSpeaking = false);
+      }
+    });
+  }
+
+  // --- NATIVE SPEECH TO TEXT MICROPHONE CONTROLLER ---
+  Future<void> _toggleVoiceRecording() async {
+    final currentLang = LanguageManager.of(context).currentLocale.languageCode;
+    String sttTargetLocale = currentLang == 'ko' ? 'ko_KR' : 'en_US';
+
+    if (!_isListening) {
+      bool available = await _speechEngine.initialize(
+        onStatus: (status) {
+          if (status == 'notListening' && mounted) {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (error) => debugPrint('STT Error: $error'),
+      );
+
+      if (available) {
+        setState(() => _isListening = true);
+        _speechEngine.listen(
+          localeId: sttTargetLocale,
+          onResult: (result) {
+            if (result.finalResult && mounted) {
+              setState(() => _isListening = false);
+              _sendMessageToBackend(result.recognizedWords);
+            }
+          },
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speechEngine.stop();
     }
   }
 
-  // --- SHOW TEXT BOX MANUAL INPUT ---
+  // --- CONNECTS TO COMPANION BACKEND RECALL ---
+  Future<void> _sendMessageToBackend(String userQuery) async {
+    if (userQuery.trim().isEmpty) return;
+
+    final currentLang = LanguageManager.of(context).currentLocale.languageCode;
+
+    setState(() {
+      _avatarResponseText = "..."; 
+    });
+
+    try {
+      // Simulating standard contextual inference parsing delay
+      await Future.delayed(const Duration(seconds: 2));
+      
+      String responseText = currentLang == 'ko' 
+          ? "어제 무릎이 아프다고 말씀하신 게 기억나요. 오늘은 좀 어떠신가요?" 
+          : "I remember you mentioned your knee was hurting yesterday. Is it feeling any better now?";
+      
+      setState(() {
+        _avatarResponseText = responseText;
+      });
+
+      _speakVoiceOutput(responseText, currentLang);
+    } catch (e) {
+      String errorMsg = currentLang == 'ko'
+          ? "연결이 조금 불안정해요. 다시 한 번 말씀해 주세요."
+          : "I'm having trouble connecting right now. Let's try again.";
+          
+      setState(() {
+        _avatarResponseText = errorMsg;
+      });
+      _speakVoiceOutput(errorMsg, currentLang);
+    }
+  }
+
   void _showTypeDialog(BuildContext context, AppLocalizations local) {
     showDialog(
       context: context,
@@ -609,94 +1068,93 @@ class _AvatarPageState extends State<AvatarPage> {
   @override
   Widget build(BuildContext context) {
     final local = AppLocalizations.of(context);
+    final currentLang = LanguageManager.of(context).currentLocale.languageCode;
 
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // NOTE: Replace this CircleAvatar widget later with HeyGen / D-ID video surface player
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _isAvatarSpeaking ? Colors.blue : Colors.green, 
-                  width: 4
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _isAvatarSpeaking ? Colors.blue : Colors.green, 
+                    width: 5
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 85,
+                  backgroundColor: _isAvatarSpeaking ? Colors.blue.shade100 : Colors.green.shade100,
+                  child: Icon(
+                    _isAvatarSpeaking ? Icons.record_voice_over : Icons.elderly, 
+                    size: 90, 
+                    color: _isAvatarSpeaking ? Colors.blue : Colors.green
+                  ),
                 ),
               ),
-              child: CircleAvatar(
-                radius: 75,
-                backgroundColor: _isAvatarSpeaking ? Colors.blue.shade100 : Colors.green.shade100,
-                child: Icon(
-                  _isAvatarSpeaking ? Icons.record_voice_over : Icons.elderly, 
-                  size: 80, 
-                  color: _isAvatarSpeaking ? Colors.blue : Colors.green
+              const SizedBox(height: 25),
+              Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                child: Padding(
+                  padding: const EdgeInsets.all(25),
+                  child: Text(
+                    _avatarResponseText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 25),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  _avatarResponseText,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, height: 1.4),
+              const SizedBox(height: 40),
+              // SPEECH TO TEXT BUTTON
+              SizedBox(
+                width: 260,
+                height: 65,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isListening ? Colors.red : Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  onPressed: _toggleVoiceRecording,
+                  icon: Icon(_isListening ? Icons.stop : Icons.mic, size: 32),
+                  label: Text(
+                    _isListening ? (_isListening ? "Listening..." : "듣는 중...") : local.translate('btn_speak'),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 40),
-            // SPEECH TO TEXT TRIGGER
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(200, 50),
-                backgroundColor: _isListening ? Colors.red : Colors.green,
-                foregroundColor: Colors.white,
+              const SizedBox(height: 15),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(260, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                onPressed: () => _showTypeDialog(context, local),
+                icon: const Icon(Icons.keyboard, size: 24),
+                label: Text(local.translate('btn_type'), style: const TextStyle(fontSize: 18)),
               ),
-              onPressed: () {
-                setState(() {
-                  _isListening = !_isListening;
-                });
-                if (_isListening) {
-                  // Simulate picking up microphone speech input after 3 seconds
-                  Future.delayed(const Duration(seconds: 3), () {
-                    if (mounted && _isListening) {
-                      setState(() => _isListening = false);
-                      _sendMessageToBackend("I feel a bit lonely today.");
-                    }
-                  });
-                }
-              },
-              icon: Icon(_isListening ? Icons.stop : Icons.mic, size: 24),
-              label: Text(_isListening ? "Listening..." : local.translate('btn_speak')),
-            ),
-            const SizedBox(height: 12),
-            // KEYBOARD TEXT OVERRIDE
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size(200, 45)),
-              onPressed: () => _showTypeDialog(context, local),
-              icon: const Icon(Icons.keyboard),
-              label: Text(local.translate('btn_type')),
-            ),
-            const SizedBox(height: 12),
-            // RE-PLAY VOICE SPEECH AUDIO
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(minimumSize: const Size(200, 45)),
-              onPressed: () {
-                // Trigger Text-to-Speech playback of context text manually if needed
-              },
-              icon: const Icon(Icons.volume_up),
-              label: Text(local.translate('btn_listen')),
-            ),
-          ],
+              const SizedBox(height: 15),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(260, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                onPressed: () => _speakVoiceOutput(_avatarResponseText, currentLang),
+                icon: const Icon(Icons.volume_up, size: 24),
+                label: Text(local.translate('btn_listen'), style: const TextStyle(fontSize: 18)),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
-}r
+}
 
 // ================= PROFILE / SETTINGS PAGE =================
 class ProfilePage extends StatelessWidget {
@@ -737,7 +1195,7 @@ class ProfilePage extends StatelessWidget {
                 },
               ),
               RadioListTile<FontSizePreset>(
-                title: Text(local.translate('font_large'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                title: Text(local.translate('font_large'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 value: FontSizePreset.large,
                 groupValue: fontManager.currentPreset,
                 onChanged: (value) {
@@ -767,7 +1225,7 @@ class ProfilePage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               RadioListTile<Locale>(
-                title: const Text("English (🇺🇸)"),
+                title: const Text("English (🇺🇸)", style: TextStyle(fontSize: 18)),
                 value: const Locale('en'),
                 groupValue: langManager.currentLocale,
                 onChanged: (value) {
@@ -778,7 +1236,7 @@ class ProfilePage extends StatelessWidget {
                 },
               ),
               RadioListTile<Locale>(
-                title: const Text("한국어 (🇰🇷)"),
+                title: const Text("한국어 (🇰🇷)", style: TextStyle(fontSize: 18)),
                 value: const Locale('ko'),
                 groupValue: langManager.currentLocale,
                 onChanged: (value) {

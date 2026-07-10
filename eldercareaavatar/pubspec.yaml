@@ -10,13 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # Fixed: Nested correctly under dependencies with standard SDK matching
   flutter_localizations:
     sdk: flutter
   cupertino_icons: ^1.0.8
   google_sign_in: ^6.2.1
   kakao_flutter_sdk_user: ^1.9.5
-  
+  # UPGRADED: Moved past the deprecated V1 embedding to support modern Flutter
+  speech_to_text: ^7.3.1
+  flutter_tts: ^4.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
