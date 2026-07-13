@@ -1,26 +1,40 @@
 name: eldercareaavatar
-description: "A new Flutter project."
+description: "A new Flutter project for Elder Care Avatar."
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.5
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+
+  # Icons & UI
   cupertino_icons: ^1.0.8
+
+  # Auth & Networking
   google_sign_in: ^6.2.1
   kakao_flutter_sdk_user: ^1.9.5
+  http: ^1.2.0
+
+  # Media & Speech
   speech_to_text: ^7.3.1
   flutter_tts: ^4.2.1
   model_viewer_plus: ^1.7.0
   youtube_player_flutter: ^9.0.0
-  http: ^1.2.0
-webfeed_plus: ^1.0.1
+
+  # XML & News Feed Parsing
+  webfeed_plus: ^1.1.1
+  xml: ^6.5.0
+
+# Overrides package conflicts with Flutter SDK
+dependency_overrides:
+  intl: ^0.20.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

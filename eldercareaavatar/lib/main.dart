@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webfeed_plus/webfeed_plus.dart';
+import 'package:xml/xml.dart' as xml;
 void main() {
   runApp(
     const LanguageManager(
@@ -907,7 +908,7 @@ class DashboardPage extends StatelessWidget {
   }
 }
 // ================= AVATAR PAGE (INTEGRATED WITH STT & TTS) =================
-// ================= AVATAR PAGE =================
+/// ================= AVATAR PAGE =================
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key});
 
@@ -926,23 +927,30 @@ class _AvatarPageState extends State<AvatarPage> {
   final stt.SpeechToText _speechEngine = stt.SpeechToText();
   final FlutterTts _ttsEngine = FlutterTts();
 
+  // YouTube Player Controller
+  YoutubePlayerController? _youtubeController;
+
+  // Korean News Feed State Variables
+  List<RssItem> _newsItems = [];
+  bool _isLoadingNews = false;
+  String? _newsErrorMessage;
+
   // ================= FRIEND & STORY PERSONALIZATION MEMORY =================
-  // Short-term story/conversation memory history
   final List<Map<String, String>> _conversationMemory = [];
 
-  // Long-term personal details about the elder user
   final Map<String, String> _userPersonalDetails = {
     'userName': 'Mary',
     'medicalHistory': 'right knee pain reported yesterday',
     'familyMembers': 'grandson Tommy',
     'hobbies': 'gardening, listening to old trot music',
-    'favoriteYoutube': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Default video link
+    'favoriteYoutube': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   };
   // =========================================================================
 
   @override
   void initState() {
     super.initState();
+    _fetchKoreanNews();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _triggerInitialGreeting();
     });
@@ -953,7 +961,65 @@ class _AvatarPageState extends State<AvatarPage> {
     _ttsEngine.stop();
     _speechEngine.stop();
     _textController.dispose();
+    _youtubeController?.dispose();
     super.dispose();
+  }
+
+  /// Fetches recent Korean headlines using Yonhap RSS
+  Future<void> _fetchKoreanNews() async {
+    setState(() {
+      _isLoadingNews = true;
+      _newsErrorMessage = null;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://www.yonhapnewstv.co.kr/browse/feed/'),
+      );
+
+      if (response.statusCode == 200) {
+        final feed = RssFeed.parse(response.body);
+        setState(() {
+          _newsItems = feed.items ?? [];
+          _isLoadingNews = false;
+        });
+      } else {
+        setState(() {
+          _newsErrorMessage = '뉴스 데이터를 불러올 수 없습니다 (Error: ${response.statusCode})';
+          _isLoadingNews = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _newsErrorMessage = '네트워크 오류가 발생했습니다.';
+        _isLoadingNews = false;
+      });
+    }
+  }
+
+  Future<void> _launchNewsUrl(String? urlString) async {
+    if (urlString == null) return;
+    final Uri url = Uri.parse(urlString);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _setupYoutubePlayer(String url) {
+    final videoId = YoutubePlayer.convertUrlToId(url);
+    if (videoId != null) {
+      if (_youtubeController == null) {
+        _youtubeController = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const YoutubePlayerFlags(
+            autoPlay: false,
+            mute: false,
+          ),
+        );
+      } else {
+        _youtubeController!.load(videoId);
+      }
+    }
   }
 
   void _triggerInitialGreeting() {
@@ -1017,15 +1083,6 @@ class _AvatarPageState extends State<AvatarPage> {
     }
   }
 
-  // Helper to open YouTube link
-  Future<void> _openYoutubeLink(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  // System prompt generator including memory context
   String _buildSystemPrompt(String userQuery, String currentLang) {
     return '''
     SYSTEM INSTRUCTION: You are an AI companion for an elder person named ${_userPersonalDetails['userName']}.
@@ -1046,12 +1103,11 @@ class _AvatarPageState extends State<AvatarPage> {
 
     final currentLang = LanguageManager.of(context).currentLocale.languageCode;
 
-    // Record turn into story memory
     _conversationMemory.add({'role': 'user', 'content': userQuery});
 
     setState(() {
       _avatarResponseText = "...";
-      _suggestedYoutubeUrl = null; // Reset YouTube link
+      _suggestedYoutubeUrl = null;
     });
 
     try {
@@ -1065,8 +1121,8 @@ class _AvatarPageState extends State<AvatarPage> {
 
       if (userQuery.contains("music") || userQuery.contains("노래") || userQuery.contains("음악")) {
         responseText = currentLang == 'ko'
-            ? "좋아하시는 음악 유튜브 영상을 찾아보았어요! 아래 버튼을 누르면 재생돼요."
-            : "I found a YouTube music video you might enjoy! Tap the button below to watch.";
+            ? "좋아하시는 음악 유튜브 영상을 찾아보았어요! 아래에서 바로 감상하실 수 있어요."
+            : "I found a YouTube music video you might enjoy! You can watch it directly below.";
         youtubeUrl = _userPersonalDetails['favoriteYoutube'];
       } else if (userQuery.contains("knee") || userQuery.contains("무릎")) {
         responseText = currentLang == 'ko'
@@ -1082,8 +1138,11 @@ class _AvatarPageState extends State<AvatarPage> {
             : "I understand! Did you get a chance to tend to your garden today? It's always so nice chatting with you.";
       }
 
-      // Record AI response into conversation memory
       _conversationMemory.add({'role': 'assistant', 'content': responseText});
+
+      if (youtubeUrl != null) {
+        _setupYoutubePlayer(youtubeUrl);
+      }
 
       setState(() {
         _avatarResponseText = responseText;
@@ -1145,49 +1204,72 @@ class _AvatarPageState extends State<AvatarPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ================= ANIMATED AVATAR WITH MOVING LIMBS =================
+              // Animated Avatar Widget
               AnimatedAvatarWidget(
                 isSpeaking: _isAvatarSpeaking,
                 isListening: _isListening,
               ),
-              // =====================================================================
 
               const SizedBox(height: 25),
+
+              // Avatar Response Text Card
               Card(
                 elevation: 3,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 child: Padding(
                   padding: const EdgeInsets.all(25),
-                  child: Column(
-                    children: [
-                      Text(
-                        _avatarResponseText,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
-                      ),
-                      if (_suggestedYoutubeUrl != null) ...[
-                        const SizedBox(height: 15),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () => _openYoutubeLink(_suggestedYoutubeUrl!),
-                          icon: const Icon(Icons.play_circle_fill, size: 28),
-                          label: const Text(
-                            "Watch YouTube Video",
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: Text(
+                    _avatarResponseText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
 
-              // SPEECH TO TEXT BUTTON
+              // Embedded YouTube Player Section
+              if (_suggestedYoutubeUrl != null && _youtubeController != null) ...[
+                const SizedBox(height: 20),
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        color: Colors.red,
+                        child: const Row(
+                          children: [
+                            Icon(Icons.play_circle_fill, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              "추천 영상 (YouTube)",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      YoutubePlayer(
+                        controller: _youtubeController!,
+                        showVideoProgressIndicator: true,
+                        progressIndicatorColor: Colors.red,
+                        progressColors: const ProgressBarColors(
+                          playedColor: Colors.red,
+                          handleColor: Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 30),
+
+              // Voice and Typing Controls
               SizedBox(
                 width: 260,
                 height: 65,
@@ -1225,6 +1307,91 @@ class _AvatarPageState extends State<AvatarPage> {
                 icon: const Icon(Icons.volume_up, size: 24),
                 label: Text(local.translate('btn_listen'), style: const TextStyle(fontSize: 18)),
               ),
+
+              const SizedBox(height: 35),
+              const Divider(thickness: 1.5),
+              const SizedBox(height: 15),
+
+              // Korean News Feed Section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.newspaper, color: Colors.green, size: 28),
+                      SizedBox(width: 8),
+                      Text(
+                        '실시간 한국 뉴스',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 26),
+                    onPressed: _fetchKoreanNews,
+                    tooltip: '뉴스 새로고침',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 15),
+
+              if (_isLoadingNews)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 30),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_newsErrorMessage != null)
+                Card(
+                  color: Colors.red.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(_newsErrorMessage!, style: const TextStyle(color: Colors.red, fontSize: 16)),
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: math.min(_newsItems.length, 5),
+                  itemBuilder: (context, index) {
+                    final item = _newsItems[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 2,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        title: Text(
+                          item.title ?? '제목 없음',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: item.pubDate != null
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 6.0),
+                                child: Text(
+                                  item.pubDate.toString(),
+                                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                                ),
+                              )
+                            : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.volume_up, color: Colors.green, size: 26),
+                              onPressed: () => _speakVoiceOutput(item.title ?? '', currentLang),
+                              tooltip: '뉴스 제목 듣기',
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: () => _launchNewsUrl(item.link),
+                      ),
+                    );
+                  },
+                ),
             ],
           ),
         ),
