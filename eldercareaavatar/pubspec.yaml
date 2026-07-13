@@ -20,7 +20,7 @@ dependencies:
   model_viewer_plus: ^1.7.0
   youtube_player_flutter: ^9.0.0
   http: ^1.2.0
-
+webfeed_plus: ^1.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
