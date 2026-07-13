@@ -13,6 +13,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  # AI & Gemini SDK
+  google_generative_ai: ^0.4.0
+
   # Icons & UI
   cupertino_icons: ^1.0.8
 

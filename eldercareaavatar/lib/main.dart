@@ -11,6 +11,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webfeed_plus/webfeed_plus.dart';
 import 'package:xml/xml.dart' as xml;
+import 'package:google_generative_ai/google_generative_ai.dart';
 void main() {
   runApp(
     const LanguageManager(
