@@ -18,7 +18,7 @@ dependencies:
   # UPGRADED: Moved past the deprecated V1 embedding to support modern Flutter
   speech_to_text: ^7.3.1
   flutter_tts: ^4.2.1
-
+model_viewer_plus: ^1.7.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -4,7 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
-
+import 'dart:math' as math;
 void main() {
   runApp(
     const LanguageManager(
@@ -902,6 +902,7 @@ class DashboardPage extends StatelessWidget {
   }
 }
 // ================= AVATAR PAGE (INTEGRATED WITH STT & TTS) =================
+// ================= AVATAR PAGE =================
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key});
 
@@ -922,7 +923,6 @@ class _AvatarPageState extends State<AvatarPage> {
   @override
   void initState() {
     super.initState();
-    // Use WidgetsBinding post frame callback to access localization safely once page builds
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _triggerInitialGreeting();
     });
@@ -936,11 +936,10 @@ class _AvatarPageState extends State<AvatarPage> {
     super.dispose();
   }
 
-  // --- AUTOMATIC GREETING SPEECH ON ENTRANCE ---
   void _triggerInitialGreeting() {
     final local = AppLocalizations.of(context);
     final currentLang = LanguageManager.of(context).currentLocale.languageCode;
-    
+
     setState(() {
       _avatarResponseText = local.translate('avatar_greet');
     });
@@ -948,17 +947,15 @@ class _AvatarPageState extends State<AvatarPage> {
     _speakVoiceOutput(_avatarResponseText, currentLang);
   }
 
-  // --- NATIVE TEXT TO SPEECH ENGINE INTERACTION ---
   Future<void> _speakVoiceOutput(String text, String languageCode) async {
     setState(() => _isAvatarSpeaking = true);
-    
-    // Explicitly target localized language engines
+
     String ttsTargetLocale = languageCode == 'ko' ? 'ko-KR' : 'en-US';
-    
+
     await _ttsEngine.setLanguage(ttsTargetLocale);
-    await _ttsEngine.setSpeechRate(0.4); // Slower, highly audible rhythm designed for seniors
+    await _ttsEngine.setSpeechRate(0.4);
     await _ttsEngine.setPitch(1.0);
-    
+
     await _ttsEngine.speak(text);
 
     _ttsEngine.setCompletionHandler(() {
@@ -968,7 +965,6 @@ class _AvatarPageState extends State<AvatarPage> {
     });
   }
 
-  // --- NATIVE SPEECH TO TEXT MICROPHONE CONTROLLER ---
   Future<void> _toggleVoiceRecording() async {
     final currentLang = LanguageManager.of(context).currentLocale.languageCode;
     String sttTargetLocale = currentLang == 'ko' ? 'ko_KR' : 'en_US';
@@ -1001,24 +997,22 @@ class _AvatarPageState extends State<AvatarPage> {
     }
   }
 
-  // --- CONNECTS TO COMPANION BACKEND RECALL ---
   Future<void> _sendMessageToBackend(String userQuery) async {
     if (userQuery.trim().isEmpty) return;
 
     final currentLang = LanguageManager.of(context).currentLocale.languageCode;
 
     setState(() {
-      _avatarResponseText = "..."; 
+      _avatarResponseText = "...";
     });
 
     try {
-      // Simulating standard contextual inference parsing delay
       await Future.delayed(const Duration(seconds: 2));
-      
-      String responseText = currentLang == 'ko' 
-          ? "어제 무릎이 아프다고 말씀하신 게 기억나요. 오늘은 좀 어떠신가요?" 
+
+      String responseText = currentLang == 'ko'
+          ? "어제 무릎이 아프다고 말씀하신 게 기억나요. 오늘은 좀 어떠신가요?"
           : "I remember you mentioned your knee was hurting yesterday. Is it feeling any better now?";
-      
+
       setState(() {
         _avatarResponseText = responseText;
       });
@@ -1028,7 +1022,7 @@ class _AvatarPageState extends State<AvatarPage> {
       String errorMsg = currentLang == 'ko'
           ? "연결이 조금 불안정해요. 다시 한 번 말씀해 주세요."
           : "I'm having trouble connecting right now. Let's try again.";
-          
+
       setState(() {
         _avatarResponseText = errorMsg;
       });
@@ -1078,24 +1072,13 @@ class _AvatarPageState extends State<AvatarPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _isAvatarSpeaking ? Colors.blue : Colors.green, 
-                    width: 5
-                  ),
-                ),
-                child: CircleAvatar(
-                  radius: 85,
-                  backgroundColor: _isAvatarSpeaking ? Colors.blue.shade100 : Colors.green.shade100,
-                  child: Icon(
-                    _isAvatarSpeaking ? Icons.record_voice_over : Icons.elderly, 
-                    size: 90, 
-                    color: _isAvatarSpeaking ? Colors.blue : Colors.green
-                  ),
-                ),
+              // ================= ANIMATED AVATAR WITH MOVING LIMBS =================
+              AnimatedAvatarWidget(
+                isSpeaking: _isAvatarSpeaking,
+                isListening: _isListening,
               ),
+              // =====================================================================
+
               const SizedBox(height: 25),
               Card(
                 elevation: 3,
@@ -1110,6 +1093,7 @@ class _AvatarPageState extends State<AvatarPage> {
                 ),
               ),
               const SizedBox(height: 40),
+
               // SPEECH TO TEXT BUTTON
               SizedBox(
                 width: 260,
@@ -1123,7 +1107,7 @@ class _AvatarPageState extends State<AvatarPage> {
                   onPressed: _toggleVoiceRecording,
                   icon: Icon(_isListening ? Icons.stop : Icons.mic, size: 32),
                   label: Text(
-                    _isListening ? (_isListening ? "Listening..." : "듣는 중...") : local.translate('btn_speak'),
+                    _isListening ? "Listening..." : local.translate('btn_speak'),
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1154,6 +1138,201 @@ class _AvatarPageState extends State<AvatarPage> {
       ),
     );
   }
+}
+
+// ================= PROCEDURAL ANIMATED AVATAR WITH ARMS AND LEGS =================
+class AnimatedAvatarWidget extends StatefulWidget {
+  final bool isSpeaking;
+  final bool isListening;
+
+  const AnimatedAvatarWidget({
+    super.key,
+    required this.isSpeaking,
+    required this.isListening,
+  });
+
+  @override
+  State<AnimatedAvatarWidget> createState() => _AnimatedAvatarWidgetState();
+}
+
+class _AnimatedAvatarWidgetState extends State<AnimatedAvatarWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return CustomPaint(
+          size: const Size(200, 220),
+          painter: AvatarPainter(
+            progress: _controller.value,
+            isSpeaking: widget.isSpeaking,
+            isListening: widget.isListening,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class AvatarPainter extends CustomPainter {
+  final double progress;
+  final bool isSpeaking;
+  final bool isListening;
+
+  AvatarPainter({
+    required this.progress,
+    required this.isSpeaking,
+    required this.isListening,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2 - 10);
+
+    final bobbingOffset = math.sin(progress * math.pi) * (isSpeaking ? 8.0 : 4.0);
+    final avatarCenterY = center.dy + bobbingOffset;
+
+    final primaryColor = isSpeaking
+        ? Colors.blue
+        : (isListening ? Colors.orange : Colors.green);
+
+    final shadowPaint = Paint()..color = Colors.black.withOpacity(0.15);
+    final bodyPaint = Paint()
+      ..color = primaryColor
+      ..style = PaintingStyle.fill;
+
+    final limbPaint = Paint()
+      ..color = primaryColor.shade700
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10.0
+      ..strokeCap = StrokeCap.round;
+
+    // Floor Shadow
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(center.dx, size.height - 15),
+        width: 110 - (bobbingOffset * 2.5),
+        height: 14,
+      ),
+      shadowPaint,
+    );
+
+    // Legs Motion
+    final legSwing = math.sin(progress * math.pi) * (isSpeaking ? 0.25 : 0.08);
+    _drawLimb(
+      canvas,
+      start: Offset(center.dx - 22, avatarCenterY + 45),
+      length: 42,
+      angle: math.pi / 2 + legSwing,
+      paint: limbPaint,
+    );
+    _drawLimb(
+      canvas,
+      start: Offset(center.dx + 22, avatarCenterY + 45),
+      length: 42,
+      angle: math.pi / 2 - legSwing,
+      paint: limbPaint,
+    );
+
+    // Torso
+    canvas.drawCircle(Offset(center.dx, avatarCenterY + 15), 45, bodyPaint);
+
+    // Arms Motion
+    final armSwing = math.sin(progress * math.pi) * (isSpeaking ? 0.35 : 0.1);
+    
+    // Left Arm
+    _drawLimb(
+      canvas,
+      start: Offset(center.dx - 38, avatarCenterY + 10),
+      length: 38,
+      angle: math.pi + 0.3 - armSwing,
+      paint: limbPaint,
+    );
+
+    // Right Arm (Waves when speaking or listening)
+    double rightArmAngle = 0.3 + armSwing;
+    if (isSpeaking) {
+      rightArmAngle = -math.pi / 3 + armSwing;
+    } else if (isListening) {
+      rightArmAngle = -math.pi / 4;
+    }
+
+    _drawLimb(
+      canvas,
+      start: Offset(center.dx + 38, avatarCenterY + 10),
+      length: 38,
+      angle: rightArmAngle,
+      paint: limbPaint,
+    );
+
+    // Head
+    canvas.drawCircle(Offset(center.dx, avatarCenterY - 35), 35, bodyPaint);
+
+    // Eyes
+    final eyePaint = Paint()..color = Colors.white;
+    final pupilPaint = Paint()..color = Colors.black87;
+
+    canvas.drawCircle(Offset(center.dx - 12, avatarCenterY - 40), 7, eyePaint);
+    canvas.drawCircle(Offset(center.dx - 12, avatarCenterY - 40), 3, pupilPaint);
+
+    canvas.drawCircle(Offset(center.dx + 12, avatarCenterY - 40), 7, eyePaint);
+    canvas.drawCircle(Offset(center.dx + 12, avatarCenterY - 40), 3, pupilPaint);
+
+    // Mouth
+    if (isSpeaking) {
+      final mouthHeight = (math.sin(progress * math.pi * 5).abs() * 10) + 3;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(center.dx, avatarCenterY - 22),
+          width: 14,
+          height: mouthHeight,
+        ),
+        Paint()..color = Colors.black87,
+      );
+    } else {
+      final mouthPaint = Paint()
+        ..color = Colors.black87
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..strokeCap = StrokeCap.round;
+
+      final path = Path()
+        ..moveTo(center.dx - 10, avatarCenterY - 25)
+        ..quadraticBezierTo(center.dx, avatarCenterY - 18, center.dx + 10, avatarCenterY - 25);
+      canvas.drawPath(path, mouthPaint);
+    }
+  }
+
+  void _drawLimb(Canvas canvas,
+      {required Offset start,
+      required double length,
+      required double angle,
+      required Paint paint}) {
+    final endX = start.dx + length * math.cos(angle);
+    final endY = start.dy + length * math.sin(angle);
+    canvas.drawLine(start, Offset(endX, endY), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant AvatarPainter oldDelegate) => true;
 }
 
 // ================= PROFILE / SETTINGS PAGE =================
