@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 void main() {
   runApp(
     const LanguageManager(
@@ -917,11 +918,26 @@ class _AvatarPageState extends State<AvatarPage> {
   String _avatarResponseText = "";
   bool _isListening = false;
   bool _isAvatarSpeaking = false;
+  String? _suggestedYoutubeUrl; // Stores active YouTube link if AI recommends one
   final TextEditingController _textController = TextEditingController();
 
   // STT and TTS Native instances
   final stt.SpeechToText _speechEngine = stt.SpeechToText();
   final FlutterTts _ttsEngine = FlutterTts();
+
+  // ================= FRIEND & STORY PERSONALIZATION MEMORY =================
+  // Short-term story/conversation memory history
+  final List<Map<String, String>> _conversationMemory = [];
+
+  // Long-term personal details about the elder user
+  final Map<String, String> _userPersonalDetails = {
+    'userName': 'Mary',
+    'medicalHistory': 'right knee pain reported yesterday',
+    'familyMembers': 'grandson Tommy',
+    'hobbies': 'gardening, listening to old trot music',
+    'favoriteYoutube': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Default video link
+  };
+  // =========================================================================
 
   @override
   void initState() {
@@ -1000,24 +1016,77 @@ class _AvatarPageState extends State<AvatarPage> {
     }
   }
 
+  // Helper to open YouTube link
+  Future<void> _openYoutubeLink(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  // System prompt generator including memory context
+  String _buildSystemPrompt(String userQuery, String currentLang) {
+    return '''
+    SYSTEM INSTRUCTION: You are an AI companion for an elder person named ${_userPersonalDetails['userName']}.
+    Long-term Memory Context:
+    - Health Note: ${_userPersonalDetails['medicalHistory']}
+    - Family: ${_userPersonalDetails['familyMembers']}
+    - Hobbies: ${_userPersonalDetails['hobbies']}
+    - Recent Chat Log: $_conversationMemory
+
+    Current Input: "$userQuery"
+    Language: $currentLang
+    Goal: Speak warmly like a close friend, ask gentle follow-up questions, and offer Youtube music/videos when relevant.
+    ''';
+  }
+
   Future<void> _sendMessageToBackend(String userQuery) async {
     if (userQuery.trim().isEmpty) return;
 
     final currentLang = LanguageManager.of(context).currentLocale.languageCode;
 
+    // Record turn into story memory
+    _conversationMemory.add({'role': 'user', 'content': userQuery});
+
     setState(() {
       _avatarResponseText = "...";
+      _suggestedYoutubeUrl = null; // Reset YouTube link
     });
 
     try {
+      final prompt = _buildSystemPrompt(userQuery, currentLang);
+      debugPrint("Prompt Payload: $prompt");
+
       await Future.delayed(const Duration(seconds: 2));
 
-      String responseText = currentLang == 'ko'
-          ? "어제 무릎이 아프다고 말씀하신 게 기억나요. 오늘은 좀 어떠신가요?"
-          : "I remember you mentioned your knee was hurting yesterday. Is it feeling any better now?";
+      String responseText = "";
+      String? youtubeUrl;
+
+      if (userQuery.contains("music") || userQuery.contains("노래") || userQuery.contains("음악")) {
+        responseText = currentLang == 'ko'
+            ? "좋아하시는 음악 유튜브 영상을 찾아보았어요! 아래 버튼을 누르면 재생돼요."
+            : "I found a YouTube music video you might enjoy! Tap the button below to watch.";
+        youtubeUrl = _userPersonalDetails['favoriteYoutube'];
+      } else if (userQuery.contains("knee") || userQuery.contains("무릎")) {
+        responseText = currentLang == 'ko'
+            ? "어제 무릎이 아프다고 말씀하신 게 기억나요. 오늘은 좀 어떠신가요?"
+            : "I remember you mentioned your knee was hurting yesterday. Is it feeling any better now?";
+      } else if (userQuery.contains("Tommy") || userQuery.contains("손주")) {
+        responseText = currentLang == 'ko'
+            ? "손주 토미 이야기를 하시는군요! 토미는 요새도 자주 연락하나요?"
+            : "Ah, speaking of your grandson Tommy! Has he visited you recently?";
+      } else {
+        responseText = currentLang == 'ko'
+            ? "그렇군요! 오늘 화단 정원 가꾸기는 좀 하셨나요? 늘 이야기 나누어 주셔서 감사해요."
+            : "I understand! Did you get a chance to tend to your garden today? It's always so nice chatting with you.";
+      }
+
+      // Record AI response into conversation memory
+      _conversationMemory.add({'role': 'assistant', 'content': responseText});
 
       setState(() {
         _avatarResponseText = responseText;
+        _suggestedYoutubeUrl = youtubeUrl;
       });
 
       _speakVoiceOutput(responseText, currentLang);
@@ -1088,10 +1157,30 @@ class _AvatarPageState extends State<AvatarPage> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 child: Padding(
                   padding: const EdgeInsets.all(25),
-                  child: Text(
-                    _avatarResponseText,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
+                  child: Column(
+                    children: [
+                      Text(
+                        _avatarResponseText,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
+                      ),
+                      if (_suggestedYoutubeUrl != null) ...[
+                        const SizedBox(height: 15),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => _openYoutubeLink(_suggestedYoutubeUrl!),
+                          icon: const Icon(Icons.play_circle_fill, size: 28),
+                          label: const Text(
+                            "Watch YouTube Video",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),

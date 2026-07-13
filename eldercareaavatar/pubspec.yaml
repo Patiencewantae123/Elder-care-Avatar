@@ -15,16 +15,18 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_sign_in: ^6.2.1
   kakao_flutter_sdk_user: ^1.9.5
-  # UPGRADED: Moved past the deprecated V1 embedding to support modern Flutter
   speech_to_text: ^7.3.1
   flutter_tts: ^4.2.1
-model_viewer_plus: ^1.7.0
+  model_viewer_plus: ^1.7.0
+  youtube_player_flutter: ^9.0.0
+  http: ^1.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.3
   flutter_lints: ^6.0.0
-youtube_player_flutter: ^9.0.0
+
 flutter_launcher_icons:
   android: true
   ios: true
