@@ -1,7 +1,3 @@
-Here is a comprehensive, production-ready `README.md` tailored specifically for your **ElderConnect** project. It is structured to serve as clean documentation for your GitHub profile or research portfolio.
-
----
-
 # ElderConnect
 
 ElderConnect is an accessibility-focused assistant application developed in Flutter, specifically engineered to support elderly users ($65+$) and their designated guardians. By pairing an empathetic, voice-interactive **AI Cartoon Companion** with localized health, safety, and community monitoring services, the application reduces technology anxiety and assists with daily cognitive tasks.
