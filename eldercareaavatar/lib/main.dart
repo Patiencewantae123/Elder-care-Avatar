@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webfeed_plus/webfeed_plus.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:google_generative_ai/google_generative_ai.dart';
+
 void main() {
   runApp(
     const LanguageManager(
@@ -909,7 +910,6 @@ class DashboardPage extends StatelessWidget {
   }
 }
 // ================= AVATAR PAGE (INTEGRATED WITH STT & TTS) =================
-/// ================= AVATAR PAGE =================
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key});
 
@@ -1205,10 +1205,29 @@ class _AvatarPageState extends State<AvatarPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Animated Avatar Widget
-              AnimatedAvatarWidget(
-                isSpeaking: _isAvatarSpeaking,
-                isListening: _isListening,
+              // --- CARTOON GIRL AVATAR VECTOR COMPONENT ---
+              Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.green.shade50,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: CustomPaint(
+                    painter: CartoonGirlPainter(
+                      isSpeaking: _isAvatarSpeaking,
+                      isListening: _isListening,
+                    ),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 25),
@@ -1398,6 +1417,109 @@ class _AvatarPageState extends State<AvatarPage> {
         ),
       ),
     );
+  }
+}
+
+// ================= THE CUSTOM CARTOON GIRL AVATAR PAINTER =================
+class CartoonGirlPainter extends CustomPainter {
+  final bool isSpeaking;
+  final bool isListening;
+
+  CartoonGirlPainter({required this.isSpeaking, required this.isListening});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    
+    // 1. Back Hair Layer
+    final backHairPaint = Paint()..color = const Color(0xFF3D2B1F);
+    canvas.drawCircle(center + const Offset(0, 4), size.width * 0.44, backHairPaint);
+
+    // 2. Face Base
+    final facePaint = Paint()..color = const Color(0xFFFFE3C6);
+    canvas.drawCircle(center + const Offset(0, 12), size.width * 0.35, facePaint);
+
+    // 3. Eyes Configuration
+    final eyePaint = Paint()..color = const Color(0xFF232323);
+    final highlightPaint = Paint()..color = Colors.white;
+    
+    Offset leftEye = center + const Offset(-22, 10);
+    Offset rightEye = center + const Offset(22, 10);
+
+    if (isListening) {
+      // Curve up eyes for attentive, happy listening state
+      final linePaint = Paint()
+        ..color = const Color(0xFF232323)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(Rect.fromCircle(center: leftEye, radius: 7), math.pi, math.pi, false, linePaint);
+      canvas.drawArc(Rect.fromCircle(center: rightEye, radius: 7), math.pi, math.pi, false, linePaint);
+    } else {
+      // Large classic friendly cartoon pupils
+      canvas.drawCircle(leftEye, 8.5, eyePaint);
+      canvas.drawCircle(rightEye, 8.5, eyePaint);
+      
+      // Eye reflection highlights
+      canvas.drawCircle(leftEye + const Offset(-2.5, -2.5), 2.5, highlightPaint);
+      canvas.drawCircle(rightEye + const Offset(-2.5, -2.5), 2.5, highlightPaint);
+    }
+
+    // 4. Rosy Cheeks
+    final cheekPaint = Paint()..color = const Color(0xFFFF9EAA).withOpacity(0.55);
+    canvas.drawCircle(center + const Offset(-36, 22), 8, cheekPaint);
+    canvas.drawCircle(center + const Offset(36, 22), 8, cheekPaint);
+
+    // 5. Dynamic Mouth (Changes shape if speaking or resting)
+    final mouthPaint = Paint()..color = const Color(0xFFE55B5B);
+    if (isSpeaking) {
+      // Dynamic open oval mouth shape representing speech actions
+      canvas.drawOval(
+        Rect.fromCenter(center: center + const Offset(0, 26), width: 14, height: 16),
+        mouthPaint,
+      );
+    } else {
+      // Happy gentle classic smile line
+      final smilePaint = Paint()
+        ..color = const Color(0xFFE55B5B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(
+        Rect.fromCenter(center: center + const Offset(0, 24), width: 16, height: 8),
+        0,
+        math.pi,
+        false,
+        smilePaint,
+      );
+    }
+
+    // 6. Front Hair Layer / Framing Bangs
+    final frontHairPaint = Paint()..color = const Color(0xFF4A3525);
+    Path hairPath = Path();
+    hairPath.moveTo(size.width * 0.12, size.height * 0.22);
+    hairPath.quadraticBezierTo(size.width * 0.32, size.height * 0.08, size.width * 0.5, size.height * 0.24);
+    hairPath.quadraticBezierTo(size.width * 0.68, size.height * 0.08, size.width * 0.88, size.height * 0.22);
+    hairPath.quadraticBezierTo(size.width * 0.94, size.height * 0.48, size.width * 0.84, size.height * 0.54);
+    hairPath.quadraticBezierTo(size.width * 0.76, size.height * 0.26, size.width * 0.5, size.height * 0.32);
+    hairPath.quadraticBezierTo(size.width * 0.24, size.height * 0.26, size.width * 0.16, size.height * 0.54);
+    hairPath.quadraticBezierTo(size.width * 0.06, size.height * 0.48, size.width * 0.12, size.height * 0.22);
+    canvas.drawPath(hairPath, frontHairPaint);
+
+    // 7. Cute Hair Pin Accessory
+    final clipPaint = Paint()..color = Colors.greenAccent.shade700;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.24, size.height * 0.24, 11, 4.5),
+        const Radius.circular(2),
+      ),
+      clipPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CartoonGirlPainter oldDelegate) {
+    return oldDelegate.isSpeaking != isSpeaking || oldDelegate.isListening != isListening;
   }
 }
 
