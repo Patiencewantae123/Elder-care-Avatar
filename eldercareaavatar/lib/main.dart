@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:math' as math;
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webfeed_plus/webfeed_plus.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:google_generative_ai/google_generative_ai.dart';
-
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize Kakao SDK (Replace with your actual Native App Key)
   KakaoSdk.init(nativeAppKey: 'YOUR_KAKAO_NATIVE_APP_KEY');
 
   runApp(
@@ -27,7 +24,7 @@ void main() {
   );
 }
 
-// ================= TRANSLATION / LOCALIZATION SYSTEM =================
+// ================= LOCALIZATION =================
 class AppLocalizations {
   final Locale locale;
   AppLocalizations(this.locale);
@@ -121,9 +118,7 @@ class AppLocalizations {
     },
   };
 
-  String translate(String key) {
-    return _localizedValues[locale.languageCode]?[key] ?? key;
-  }
+  String translate(String key) => _localizedValues[locale.languageCode]?[key] ?? key;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -157,9 +152,7 @@ class _LanguageManagerState extends State<LanguageManager> {
   Locale get currentLocale => _currentLocale;
 
   void changeLanguage(Locale locale) {
-    setState(() {
-      _currentLocale = locale;
-    });
+    setState(() => _currentLocale = locale);
   }
 
   @override
@@ -183,9 +176,7 @@ class _LanguageInheritedWidget extends InheritedWidget {
   });
 
   @override
-  bool updateShouldNotify(_LanguageInheritedWidget oldWidget) {
-    return oldWidget.currentLocale != currentLocale;
-  }
+  bool updateShouldNotify(_LanguageInheritedWidget oldWidget) => oldWidget.currentLocale != currentLocale;
 }
 
 // ================= FONT SIZE MANAGER =================
@@ -216,9 +207,7 @@ class _FontSizeManagerState extends State<FontSizeManager> {
   }
 
   void changeFontSize(FontSizePreset preset) {
-    setState(() {
-      _currentPreset = preset;
-    });
+    setState(() => _currentPreset = preset);
   }
 
   @override
@@ -242,12 +231,10 @@ class _FontSizeInheritedWidget extends InheritedWidget {
   });
 
   @override
-  bool updateShouldNotify(_FontSizeInheritedWidget oldWidget) {
-    return oldWidget.currentPreset != currentPreset;
-  }
+  bool updateShouldNotify(_FontSizeInheritedWidget oldWidget) => oldWidget.currentPreset != currentPreset;
 }
 
-// ================= APP ROOT =================
+// ================= ROOT APPLICATION =================
 class ElderConnectApp extends StatelessWidget {
   const ElderConnectApp({super.key});
 
@@ -284,7 +271,7 @@ class ElderConnectApp extends StatelessWidget {
   }
 }
 
-// ================= LOGIN PAGE (AUTO BYPASS - NO LOGIN REQUIRED) =================
+// ================= LOGIN PAGE (AUTO-BYPASS) =================
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -307,14 +294,12 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }
 
-// ================= MAIN HOLDER / HOME PAGE =================
+// ================= MAIN SHELL =================
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -349,16 +334,16 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(icon: const Icon(Icons.person), label: local.translate('nav_profile')),
         ],
         onDestinationSelected: (index) {
-          setState(() {
-            currentIndex = index;
-          });
+          setState(() => currentIndex = index);
         },
       ),
     );
   }
 }
 
-// ================= AVATAR PAGE (BLINKS & MOVES MOUTH WHILE TALKING) =================
+// ================= FULLY REACTIVE AVATAR PAGE =================
+enum AvatarState { idle, listening, thinking, speaking }
+
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key});
 
@@ -371,31 +356,37 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
   final TextEditingController _textController = TextEditingController();
 
-  late AnimationController _floatController;
-  late AnimationController _mouthController;
-  late AnimationController _blinkController;
-
-  bool _isListening = false;
-  bool _isSpeaking = false;
+  AvatarState _currentState = AvatarState.idle;
   String _aiResponse = "";
+  Offset _pointerOffset = Offset.zero;
+
+  late AnimationController _breathingController;
+  late AnimationController _talkingMouthController;
+  late AnimationController _blinkController;
+  late AnimationController _pulseGlowController;
 
   @override
   void initState() {
     super.initState();
 
-    _floatController = AnimationController(
+    _breathingController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
 
-    _mouthController = AnimationController(
+    _talkingMouthController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 140),
     );
 
     _blinkController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 120),
+    );
+
+    _pulseGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
     );
 
     _startRandomBlinking();
@@ -404,7 +395,7 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
 
   void _startRandomBlinking() async {
     while (mounted) {
-      await Future.delayed(Duration(milliseconds: 2500 + math.Random().nextInt(2500)));
+      await Future.delayed(Duration(milliseconds: 2000 + math.Random().nextInt(3000)));
       if (mounted) {
         await _blinkController.forward();
         await _blinkController.reverse();
@@ -415,37 +406,38 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
   void _initTtsAndAutoGreet() async {
     await _tts.setLanguage("ko-KR");
     await _tts.setPitch(1.1);
-    await _tts.setSpeechRate(0.8);
+    await _tts.setSpeechRate(0.85);
 
     _tts.setStartHandler(() {
       if (mounted) {
-        setState(() => _isSpeaking = true);
-        _mouthController.repeat(reverse: true);
+        setState(() => _currentState = AvatarState.speaking);
+        _talkingMouthController.repeat(reverse: true);
+        _pulseGlowController.repeat(reverse: true);
       }
     });
 
     _tts.setCompletionHandler(() {
       if (mounted) {
-        setState(() => _isSpeaking = false);
-        _mouthController.stop();
-        _mouthController.reset();
+        setState(() => _currentState = AvatarState.idle);
+        _talkingMouthController.stop();
+        _talkingMouthController.reset();
+        _pulseGlowController.stop();
+        _pulseGlowController.reset();
       }
     });
 
     _tts.setErrorHandler((msg) {
       if (mounted) {
-        setState(() => _isSpeaking = false);
-        _mouthController.stop();
-        _mouthController.reset();
+        setState(() => _currentState = AvatarState.idle);
+        _talkingMouthController.stop();
+        _pulseGlowController.stop();
       }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final local = AppLocalizations.of(context);
       final greeting = local.translate('avatar_greet');
-      setState(() {
-        _aiResponse = greeting;
-      });
+      setState(() => _aiResponse = greeting);
       _speak(greeting);
     });
   }
@@ -458,13 +450,22 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
   }
 
   Future<void> _listen() async {
-    if (!_isListening) {
+    if (_currentState != AvatarState.listening) {
       bool available = await _speech.initialize(
-        onStatus: (val) => debugPrint('STT Status: $val'),
-        onError: (val) => debugPrint('STT Error: $val'),
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (_currentState == AvatarState.listening) {
+              setState(() => _currentState = AvatarState.idle);
+              _pulseGlowController.stop();
+            }
+          }
+        },
+        onError: (error) => setState(() => _currentState = AvatarState.idle),
       );
+
       if (available) {
-        setState(() => _isListening = true);
+        setState(() => _currentState = AvatarState.listening);
+        _pulseGlowController.repeat(reverse: true);
         _speech.listen(
           onResult: (val) {
             setState(() {
@@ -474,7 +475,8 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
         );
       }
     } else {
-      setState(() => _isListening = false);
+      setState(() => _currentState = AvatarState.idle);
+      _pulseGlowController.stop();
       _speech.stop();
       if (_textController.text.isNotEmpty) {
         _processAiResponse(_textController.text);
@@ -483,33 +485,66 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
   }
 
   Future<void> _processAiResponse(String prompt) async {
+    setState(() => _currentState = AvatarState.thinking);
+    _pulseGlowController.repeat(reverse: true);
+
     try {
       final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: 'YOUR_GEMINI_API_KEY');
       final response = await model.generateContent([Content.text(prompt)]);
-      
       setState(() {
         _aiResponse = response.text ?? "죄송해요, 다시 한번 말씀해 주세요.";
       });
     } catch (e) {
       double num = math.Random().nextDouble();
       setState(() {
-        _aiResponse = num > 0.5 
-            ? "오늘도 활기찬 하루 되세요! 진지하게 응원해 드릴게요." 
+        _aiResponse = num > 0.5
+            ? "오늘도 활기찬 하루 되세요! 진지하게 응원해 드릴게요."
             : "네, 말씀 잘 들었어요. 항상 편안하게 대화해 주세요.";
       });
     }
+
+    _pulseGlowController.stop();
     _speak(_aiResponse);
   }
 
   @override
   void dispose() {
-    _floatController.dispose();
-    _mouthController.dispose();
+    _breathingController.dispose();
+    _talkingMouthController.dispose();
     _blinkController.dispose();
+    _pulseGlowController.dispose();
     _tts.stop();
     _speech.stop();
     _textController.dispose();
     super.dispose();
+  }
+
+  Color _getAuraColor() {
+    switch (_currentState) {
+      case AvatarState.listening:
+        return Colors.redAccent;
+      case AvatarState.thinking:
+        return Colors.orangeAccent;
+      case AvatarState.speaking:
+        return Colors.pinkAccent;
+      case AvatarState.idle:
+      default:
+        return Colors.pink.shade200;
+    }
+  }
+
+  String _getStateLabel() {
+    switch (_currentState) {
+      case AvatarState.listening:
+        return "듣는 중...";
+      case AvatarState.thinking:
+        return "생각하는 중...";
+      case AvatarState.speaking:
+        return "말하는 중...";
+      case AvatarState.idle:
+      default:
+        return "AI 수진";
+    }
   }
 
   @override
@@ -521,104 +556,145 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
       child: Column(
         children: [
           const SizedBox(height: 10),
-          AnimatedBuilder(
-            animation: Listenable.merge([_floatController, _mouthController, _blinkController]),
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(0, math.sin(_floatController.value * math.pi) * 6),
-                child: Container(
-                  height: 220,
-                  width: 220,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFD1DC), Color(0xFFFFB6C1), Color(0xFFE6E6FA)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+          MouseRegion(
+            onHover: (event) {
+              setState(() {
+                _pointerOffset = Offset(
+                  (event.localPosition.dx - 110) / 110,
+                  (event.localPosition.dy - 110) / 110,
+                );
+              });
+            },
+            onExit: (_) => setState(() => _pointerOffset = Offset.zero),
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                _breathingController,
+                _talkingMouthController,
+                _blinkController,
+                _pulseGlowController,
+              ]),
+              builder: (context, child) {
+                final double tiltX = -_pointerOffset.dy * 0.15;
+                final double tiltY = _pointerOffset.dx * 0.15;
+                final double breathOffset = math.sin(_breathingController.value * math.pi * 2) * 5;
+                final double pulseVal = _pulseGlowController.value * 12;
+
+                return Transform(
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.001)
+                    ..rotateX(tiltX)
+                    ..rotateY(tiltY)
+                    ..translate(0.0, breathOffset, 0.0),
+                  alignment: Alignment.center,
+                  child: Container(
+                    height: 220,
+                    width: 220,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [_getAuraColor().withOpacity(0.8), Colors.white],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _getAuraColor().withOpacity(0.5),
+                          blurRadius: 18 + pulseVal,
+                          spreadRadius: 2 + (pulseVal / 2),
+                        ),
+                      ],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.pink.withOpacity(_isSpeaking ? 0.6 : 0.3),
-                        blurRadius: _isSpeaking ? 28 : 18,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      ClipOval(
-                        child: Image.network(
-                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
-                          fit: BoxFit.cover,
-                          width: 210,
-                          height: 210,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent);
-                          },
-                        ),
-                      ),
-                      Positioned(
-                        top: 82,
-                        child: Row(
-                          children: [
-                            _buildEyelid(_blinkController.value),
-                            const SizedBox(width: 32),
-                            _buildEyelid(_blinkController.value),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 68,
-                        child: Container(
-                          width: 22,
-                          height: _isSpeaking ? (3 + (_mouthController.value * 12)) : 3,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF8B263E),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFD47A85), width: 1),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ClipOval(
+                          child: Image.network(
+                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+                            fit: BoxFit.cover,
+                            width: 205,
+                            height: 205,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        bottom: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
-                          ),
+                        Positioned(
+                          top: 80 + (_pointerOffset.dy * 3),
+                          left: 68 + (_pointerOffset.dx * 5),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                _isSpeaking ? Icons.record_voice_over : Icons.face,
-                                size: 14,
-                                color: Colors.pink,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _isSpeaking ? "말하는 중..." : "AI 수진",
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.pink),
-                              ),
+                              _buildReactiveEye(_blinkController.value),
+                              const SizedBox(width: 28),
+                              _buildReactiveEye(_blinkController.value),
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          bottom: 66 - (_pointerOffset.dy * 2),
+                          child: Transform.scale(
+                            scaleX: 1.0 + (_talkingMouthController.value * 0.2),
+                            child: Container(
+                              width: 20,
+                              height: _currentState == AvatarState.speaking
+                                  ? (2 + (_talkingMouthController.value * 14))
+                                  : 2,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B263E),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFD47A85), width: 1),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 8,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: _getAuraColor(), width: 1.5),
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _getAuraColor(),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _getStateLabel(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: _getAuraColor(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
           const SizedBox(height: 25),
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Colors.pink.shade50,
+              color: _getAuraColor().withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.pink.shade200),
+              border: Border.all(color: _getAuraColor().withOpacity(0.4)),
             ),
             child: Text(
               _aiResponse.isEmpty ? local.translate('avatar_greet') : _aiResponse,
@@ -648,12 +724,12 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
             children: [
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isListening ? Colors.red : Colors.pink,
+                  backgroundColor: _currentState == AvatarState.listening ? Colors.red : Colors.pink,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 ),
-                icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+                icon: Icon(_currentState == AvatarState.listening ? Icons.mic_off : Icons.mic),
                 label: Text(local.translate('btn_speak')),
                 onPressed: _listen,
               ),
@@ -673,10 +749,10 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildEyelid(double blinkProgress) {
+  Widget _buildReactiveEye(double blinkProgress) {
     return Container(
-      width: 24,
-      height: 14 * blinkProgress,
+      width: 22,
+      height: 12 * blinkProgress,
       decoration: BoxDecoration(
         color: const Color(0xFFE2A898),
         borderRadius: BorderRadius.circular(4),
@@ -704,7 +780,6 @@ class DashboardPage extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        splashColor: accentColor.withOpacity(0.15),
         child: Container(
           decoration: isAlert
               ? BoxDecoration(
@@ -749,43 +824,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  void _navigateToYouTubeMusic(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const YouTubeMusicPage()),
-    );
-  }
-
-  void _triggerEmergencySystem(BuildContext context, dynamic local) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.gpp_maybe, size: 50, color: Colors.red),
-        title: Text(
-          local.translate('card_emer'), 
-          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          "Connecting to emergency services and notifying caregiver...",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18),
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          SizedBox(
-            width: 140,
-            height: 50,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
-              child: Text(local.translate('cancel'), style: const TextStyle(color: Colors.red)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final local = AppLocalizations.of(context);
@@ -804,7 +842,9 @@ class DashboardPage extends StatelessWidget {
             title: local.translate('card_ytmusic'),
             icon: Icons.music_note,
             accentColor: Colors.redAccent,
-            onTap: () => _navigateToYouTubeMusic(context),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const YouTubeMusicPage()));
+            },
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -915,7 +955,19 @@ class DashboardPage extends StatelessWidget {
             title: local.translate('card_emer'),
             icon: Icons.warning,
             isAlert: true,
-            onTap: () => _triggerEmergencySystem(context, local),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  icon: const Icon(Icons.gpp_maybe, size: 50, color: Colors.red),
+                  title: Text(local.translate('card_emer'), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  content: const Text("Connecting to emergency services and caregiver...", textAlign: TextAlign.center),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: Text(local.translate('cancel'))),
+                  ],
+                ),
+              );
+            },
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -945,26 +997,14 @@ class YouTubeMusicPage extends StatefulWidget {
 
 class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
   late YoutubePlayerController _controller;
-  final String _videoId = '5qap5aO4i9A'; 
 
   @override
   void initState() {
     super.initState();
     _controller = YoutubePlayerController(
-      initialVideoId: _videoId,
-      flags: const YoutubePlayerFlags(
-        autoPlay: false,
-        mute: false,
-        isLive: false,
-      ),
+      initialVideoId: '5qap5aO4i9A',
+      flags: const YoutubePlayerFlags(autoPlay: false, mute: false),
     );
-  }
-
-  Future<void> _openYouTubeMusicApp() async {
-    final Uri url = Uri.parse('https://music.youtube.com');
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch YouTube Music: $url');
-    }
   }
 
   @override
@@ -984,25 +1024,14 @@ class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            YoutubePlayer(
-              controller: _controller,
-              showVideoProgressIndicator: true,
-              progressIndicatorColor: Colors.red,
-            ),
+            YoutubePlayer(controller: _controller, showVideoProgressIndicator: true),
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
-                  const Text(
-                    "Relaxing Music Player",
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
+                  const Text("Relaxing Music Player", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
-                  const Text(
-                    "Enjoy comfortable music for mind and body.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  const Text("Enjoy comfortable music for mind and body.", textAlign: TextAlign.center),
                   const SizedBox(height: 30),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -1011,12 +1040,12 @@ class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
                       minimumSize: const Size(double.infinity, 55),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
-                    icon: const Icon(Icons.open_in_new, size: 28),
-                    label: const Text(
-                      "Open in YouTube Music",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: _openYouTubeMusicApp,
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text("Open in YouTube Music", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      final Uri url = Uri.parse('https://music.youtube.com');
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    },
                   ),
                 ],
               ),
@@ -1028,7 +1057,7 @@ class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
   }
 }
 
-// ================= PROFILE PAGE (SETTINGS & RSS NEWS READER) =================
+// ================= PROFILE PAGE =================
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -1052,7 +1081,6 @@ class _ProfilePageState extends State<ProfilePage> {
         var feed = RssFeed.parse(response.body);
         var rawXml = xml.XmlDocument.parse(response.body);
         var titleNodes = rawXml.findAllElements('title');
-        
         setState(() {
           _newsTitle = feed.items?.first.title ?? titleNodes.first.innerText;
         });
@@ -1092,10 +1120,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   children: [
                     const Icon(Icons.newspaper, color: Colors.amber),
                     const SizedBox(width: 8),
-                    Text(
-                      local.translate('news_title'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    Text(local.translate('news_title'), style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -1112,23 +1137,12 @@ class _ProfilePageState extends State<ProfilePage> {
           trailing: DropdownButton<FontSizePreset>(
             value: fontManager.currentPreset,
             onChanged: (FontSizePreset? newPreset) {
-              if (newPreset != null) {
-                fontManager.changeFontSize(newPreset);
-              }
+              if (newPreset != null) fontManager.changeFontSize(newPreset);
             },
             items: [
-              DropdownMenuItem(
-                value: FontSizePreset.small,
-                child: Text(local.translate('font_small')),
-              ),
-              DropdownMenuItem(
-                value: FontSizePreset.medium,
-                child: Text(local.translate('font_medium')),
-              ),
-              DropdownMenuItem(
-                value: FontSizePreset.large,
-                child: Text(local.translate('font_large')),
-              ),
+              DropdownMenuItem(value: FontSizePreset.small, child: Text(local.translate('font_small'))),
+              DropdownMenuItem(value: FontSizePreset.medium, child: Text(local.translate('font_medium'))),
+              DropdownMenuItem(value: FontSizePreset.large, child: Text(local.translate('font_large'))),
             ],
           ),
         ),
@@ -1140,19 +1154,11 @@ class _ProfilePageState extends State<ProfilePage> {
           trailing: DropdownButton<Locale>(
             value: langManager.currentLocale,
             onChanged: (Locale? newLocale) {
-              if (newLocale != null) {
-                langManager.changeLanguage(newLocale);
-              }
+              if (newLocale != null) langManager.changeLanguage(newLocale);
             },
             items: const [
-              DropdownMenuItem(
-                value: Locale('ko'),
-                child: Text("한국어"),
-              ),
-              DropdownMenuItem(
-                value: Locale('en'),
-                child: Text("English"),
-              ),
+              DropdownMenuItem(value: Locale('ko'), child: Text("한국어")),
+              DropdownMenuItem(value: Locale('en'), child: Text("English")),
             ],
           ),
         ),
