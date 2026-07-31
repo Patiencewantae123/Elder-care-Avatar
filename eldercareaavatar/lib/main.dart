@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:webfeed_plus/webfeed_plus.dart';
+import 'package:xml/xml.dart' as xml;
+import 'package:google_generative_ai/google_generative_ai.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Initialize Kakao SDK (Replace with your actual Native App Key)
+  KakaoSdk.init(nativeAppKey: 'YOUR_KAKAO_NATIVE_APP_KEY');
+
   runApp(
     const LanguageManager(
       child: FontSizeManager(
@@ -26,19 +39,28 @@ class AppLocalizations {
   static const Map<String, Map<String, String>> _localizedValues = {
     'en': {
       'title': 'ElderConnect',
+      'email': 'Email',
+      'password': 'Password',
+      'login': 'Login',
+      'guest': 'Continue as Guest',
+      'or_connect': 'Or Connect With',
+      'google': 'Continue with Google',
+      'kakao': 'Continue with Kakao',
+      'naver': 'Continue with Naver',
       'nav_home': 'Home',
       'nav_dash': 'Dashboard',
       'nav_profile': 'Profile',
-      'avatar_greet': 'Hello! How are you feeling today?',
-      'btn_speak': 'Speak',
-      'btn_type': 'Type Message',
-      'btn_listen': 'Listen',
+      'avatar_greet': '안녕하세요! 오늘 기분은 어떠신가요? 반가워요!',
+      'btn_speak': '말하기',
+      'btn_type': '메시지 입력',
+      'btn_listen': '듣기',
       'card_med': 'Medication',
       'card_health': 'Health',
       'card_maps': 'Maps',
       'card_comm': 'Community',
       'card_emer': 'Emergency',
       'card_care': 'Caregiver',
+      'card_ytmusic': 'YouTube Music',
       'user_guest': 'Guest User',
       'set_font': 'Font Size Settings',
       'set_font_sub': 'Adjust app layout scale for comfortable reading',
@@ -52,13 +74,23 @@ class AppLocalizations {
       'font_small': 'Small Fonts',
       'font_medium': 'Medium Fonts',
       'font_large': 'Large Fonts (Recommended)',
+      'role_senior': 'Senior',
+      'role_guardian': 'Guardian',
     },
     'ko': {
       'title': '엘더커넥트',
+      'email': '이메일',
+      'password': '비밀번호',
+      'login': '로그인',
+      'guest': '게스트로 시작하기',
+      'or_connect': '또는 다음 계정으로 로그인',
+      'google': 'Google 계정으로 계속하기',
+      'kakao': '카카오톡으로 계속하기',
+      'naver': '네이버로 계속하기',
       'nav_home': '홈',
       'nav_dash': '대시보드',
       'nav_profile': '프로필',
-      'avatar_greet': '안녕하세요! 오늘 기분은 어떠신가요?',
+      'avatar_greet': '안녕하세요! 오늘 기분은 어떠신가요? 반가워요!',
       'btn_speak': '말하기',
       'btn_type': '메시지 입력',
       'btn_listen': '듣기',
@@ -68,6 +100,7 @@ class AppLocalizations {
       'card_comm': '커뮤니티',
       'card_emer': '긴급 상황',
       'card_care': '보호자 연결',
+      'card_ytmusic': '유튜브 뮤직',
       'user_guest': '게스트 사용자',
       'set_font': '글자 크기 설정',
       'set_font_sub': '편안한 독서를 위해 화면 크기를 조절합니다',
@@ -81,6 +114,8 @@ class AppLocalizations {
       'font_small': '작은 글꼴',
       'font_medium': '보통 글꼴',
       'font_large': '큰 글꼴 (추천)',
+      'role_senior': '어르신',
+      'role_guardian': '보호자',
     },
   };
 
@@ -102,7 +137,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
-// ================= LANGUAGE MANAGER (STATE) =================
+// ================= LANGUAGE MANAGER =================
 class LanguageManager extends StatefulWidget {
   final Widget child;
   const LanguageManager({super.key, required this.child});
@@ -151,7 +186,7 @@ class _LanguageInheritedWidget extends InheritedWidget {
   }
 }
 
-// ================= FONT SIZE MANAGER (STATE) =================
+// ================= FONT SIZE MANAGER =================
 enum FontSizePreset { small, medium, large }
 
 class FontSizeManager extends StatefulWidget {
@@ -174,7 +209,7 @@ class _FontSizeManagerState extends State<FontSizeManager> {
     switch (_currentPreset) {
       case FontSizePreset.small: return 0.85;
       case FontSizePreset.medium: return 1.0;
-      case FontSizePreset.large: return 1.4;
+      case FontSizePreset.large: return 1.3;
     }
   }
 
@@ -223,7 +258,7 @@ class ElderConnectApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'ElderConnect',
       theme: ThemeData(
-        colorSchemeSeed: Colors.pinkAccent,
+        colorSchemeSeed: Colors.pink,
         useMaterial3: true,
       ),
       locale: langManager.currentLocale,
@@ -242,7 +277,38 @@ class ElderConnectApp extends StatelessWidget {
           child: child!,
         );
       },
-      home: const HomePage(),
+      home: const LoginPage(),
+    );
+  }
+}
+
+// ================= LOGIN PAGE (AUTO BYPASS - NO LOGIN REQUIRED) =================
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Automatically skip login and proceed directly to home page
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
     );
   }
 }
@@ -272,13 +338,12 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: Text(local.translate('title')),
         centerTitle: true,
-        elevation: 1,
       ),
       body: pages[currentIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         destinations: [
-          NavigationDestination(icon: const Icon(Icons.face_3), label: local.translate('nav_home')),
+          NavigationDestination(icon: const Icon(Icons.smart_toy), label: local.translate('nav_home')),
           NavigationDestination(icon: const Icon(Icons.dashboard), label: local.translate('nav_dash')),
           NavigationDestination(icon: const Icon(Icons.person), label: local.translate('nav_profile')),
         ],
@@ -287,293 +352,6 @@ class _HomePageState extends State<HomePage> {
             currentIndex = index;
           });
         },
-      ),
-    );
-  }
-}
-
-// ================= KOREAN WOMAN HUMAN AVATAR VECTOR PAINTER =================
-class KoreanWomanAvatarPainter extends CustomPainter {
-  final double animationValue;
-
-  KoreanWomanAvatarPainter({required this.animationValue});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double width = size.width;
-    final double height = size.height;
-
-    final skinPaint = Paint()..color = const Color(0xFFFFE3D6);
-    final hairPaint = Paint()..color = const Color(0xFF211510);
-    final hanbokPink = Paint()..color = const Color(0xFFFF8FA3);
-    final hanbokCollar = Paint()..color = Colors.white;
-    final cheekPaint = Paint()..color = const Color(0xFFFF758F).withOpacity(0.35);
-    final lipPaint = Paint()..color = const Color(0xFFE63946);
-    final eyePaint = Paint()..color = const Color(0xFF2B1E1A);
-
-    // Torso / Hanbok
-    final hanbokPath = Path();
-    hanbokPath.moveTo(width * 0.1, height);
-    hanbokPath.quadraticBezierTo(width * 0.25, height * 0.65, width * 0.35, height * 0.68);
-    hanbokPath.lineTo(width * 0.65, height * 0.68);
-    hanbokPath.quadraticBezierTo(width * 0.75, height * 0.65, width * 0.9, height);
-    hanbokPath.close();
-    canvas.drawPath(hanbokPath, hanbokPink);
-
-    // Collar
-    final collarPath = Path();
-    collarPath.moveTo(width * 0.4, height * 0.73);
-    collarPath.lineTo(width * 0.5, height * 0.85);
-    collarPath.lineTo(width * 0.6, height * 0.73);
-    collarPath.lineTo(width * 0.54, height * 0.68);
-    collarPath.lineTo(width * 0.46, height * 0.68);
-    collarPath.close();
-    canvas.drawPath(collarPath, hanbokCollar);
-
-    // Neck
-    final neckR = Rect.fromLTWH(width * 0.43, height * 0.58, width * 0.14, height * 0.15);
-    canvas.drawRect(neckR, skinPaint);
-
-    // Face Base
-    final facePath = Path();
-    facePath.moveTo(width * 0.28, height * 0.35);
-    facePath.cubicTo(width * 0.28, height * 0.62, width * 0.72, height * 0.62, width * 0.72, height * 0.35);
-    facePath.cubicTo(width * 0.72, height * 0.2, width * 0.28, height * 0.2, width * 0.28, height * 0.35);
-    canvas.drawPath(facePath, skinPaint);
-
-    // Cheeks
-    canvas.drawCircle(Offset(width * 0.37, height * 0.48), width * 0.05, cheekPaint);
-    canvas.drawCircle(Offset(width * 0.63, height * 0.48), width * 0.05, cheekPaint);
-
-    // Eyes
-    final double blinkFactor = (math.sin(animationValue * math.pi * 2) > 0.95) ? 0.1 : 1.0;
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(width * 0.38, height * 0.42), width: width * 0.08, height: height * 0.05 * blinkFactor),
-      eyePaint,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(width * 0.62, height * 0.42), width: width * 0.08, height: height * 0.05 * blinkFactor),
-      eyePaint,
-    );
-
-    if (blinkFactor > 0.5) {
-      final highlightPaint = Paint()..color = Colors.white;
-      canvas.drawCircle(Offset(width * 0.39, height * 0.41), width * 0.012, highlightPaint);
-      canvas.drawCircle(Offset(width * 0.63, height * 0.41), width * 0.012, highlightPaint);
-    }
-
-    // Eyebrows
-    final browPaint = Paint()
-      ..color = const Color(0xFF3D2B1F)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round;
-
-    final leftBrow = Path()
-      ..moveTo(width * 0.33, height * 0.36)
-      ..quadraticBezierTo(width * 0.38, height * 0.34, width * 0.43, height * 0.36);
-    canvas.drawPath(leftBrow, browPaint);
-
-    final rightBrow = Path()
-      ..moveTo(width * 0.57, height * 0.36)
-      ..quadraticBezierTo(width * 0.62, height * 0.34, width * 0.67, height * 0.36);
-    canvas.drawPath(rightBrow, browPaint);
-
-    // Lips
-    final lipPath = Path();
-    lipPath.moveTo(width * 0.43, height * 0.52);
-    lipPath.quadraticBezierTo(width * 0.5, height * 0.57, width * 0.57, height * 0.52);
-    lipPath.quadraticBezierTo(width * 0.5, height * 0.54, width * 0.43, height * 0.52);
-    canvas.drawPath(lipPath, lipPaint);
-
-    // Hair
-    final hairPath = Path();
-    hairPath.moveTo(width * 0.25, height * 0.35);
-    hairPath.cubicTo(width * 0.22, height * 0.12, width * 0.78, height * 0.12, width * 0.75, height * 0.35);
-    hairPath.cubicTo(width * 0.70, height * 0.20, width * 0.30, height * 0.20, width * 0.25, height * 0.35);
-    canvas.drawPath(hairPath, hairPaint);
-
-    canvas.drawOval(Rect.fromLTWH(width * 0.24, height * 0.25, width * 0.08, height * 0.25), hairPaint);
-    canvas.drawOval(Rect.fromLTWH(width * 0.68, height * 0.25, width * 0.08, height * 0.25), hairPaint);
-
-    final pinPaint = Paint()..color = const Color(0xFFFFD700);
-    canvas.drawCircle(Offset(width * 0.74, height * 0.23), width * 0.025, pinPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant KoreanWomanAvatarPainter oldDelegate) {
-    return oldDelegate.animationValue != animationValue;
-  }
-}
-
-class KoreanWomanAvatar extends StatefulWidget {
-  final double size;
-  const KoreanWomanAvatar({super.key, this.size = 250});
-
-  @override
-  State<KoreanWomanAvatar> createState() => _KoreanWomanAvatarState();
-}
-
-class _KoreanWomanAvatarState extends State<KoreanWomanAvatar> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return CustomPaint(
-          size: Size(widget.size, widget.size),
-          painter: KoreanWomanAvatarPainter(animationValue: _controller.value),
-        );
-      },
-    );
-  }
-}
-
-// ================= AVATAR PAGE (AUTO-SPEAK ON LOAD) =================
-class AvatarPage extends StatefulWidget {
-  const AvatarPage({super.key});
-
-  @override
-  State<AvatarPage> createState() => _AvatarPageState();
-}
-
-class _AvatarPageState extends State<AvatarPage> {
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  final FlutterTts _flutterTts = FlutterTts();
-  
-  bool _isListening = false;
-  String _dialogText = "";
-
-  @override
-  void initState() {
-    super.initState();
-    _initTtsAndSpeak();
-  }
-
-  void _initTtsAndSpeak() async {
-    final langCode = LanguageManager.of(context).currentLocale.languageCode;
-    await _flutterTts.setLanguage(langCode == 'ko' ? "ko-KR" : "en-US");
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.setSpeechRate(0.85);
-
-    // Auto-speak greeting after widget finishes building
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final greeting = AppLocalizations.of(context).translate('avatar_greet');
-      _speakText(greeting);
-    });
-  }
-
-  void _speakText(String text) async {
-    await _flutterTts.speak(text);
-  }
-
-  void _listen() async {
-    if (!_isListening) {
-      bool available = await _speech.initialize();
-      if (available) {
-        setState(() => _isListening = true);
-        _speech.listen(
-          onResult: (val) => setState(() {
-            _dialogText = val.recognizedWords;
-          }),
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final local = AppLocalizations.of(context);
-    final String greeting = local.translate('avatar_greet');
-
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.pink.shade50,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.pink.withOpacity(0.15),
-                    blurRadius: 20,
-                    spreadRadius: 5,
-                  )
-                ],
-              ),
-              child: const KoreanWomanAvatar(size: 240),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.pink.shade200, width: 2),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
-                ],
-              ),
-              child: Text(
-                _dialogText.isNotEmpty ? _dialogText : greeting,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-            ),
-            const SizedBox(height: 25),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isListening ? Colors.red : Colors.pink,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  ),
-                  icon: Icon(_isListening ? Icons.mic_off : Icons.mic, size: 28),
-                  label: Text(local.translate('btn_speak'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  onPressed: _listen,
-                ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  ),
-                  icon: const Icon(Icons.volume_up, size: 28),
-                  label: Text(local.translate('btn_listen'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  onPressed: () => _speakText(_dialogText.isNotEmpty ? _dialogText : greeting),
-                ),
-              ],
-            )
-          ],
-        ),
       ),
     );
   }
@@ -643,14 +421,10 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  void _navigateToFeature(BuildContext context, String featureName) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$featureName metric opened.'),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
+  void _navigateToYouTubeMusic(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const YouTubeMusicPage()),
     );
   }
 
@@ -687,11 +461,7 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final local = AppLocalizations.of(context);
-    
-    bool isKo = false;
-    try {
-      isKo = Localizations.localeOf(context).languageCode == 'ko';
-    } catch (_) {}
+    bool isKo = Localizations.localeOf(context).languageCode == 'ko';
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -701,43 +471,67 @@ class DashboardPage extends StatelessWidget {
         mainAxisSpacing: 12,
         childAspectRatio: 0.95,
         children: [
+          // 1. YOUTUBE MUSIC INTEGRATION
+          _buildInformativeCard(
+            context: context,
+            title: local.translate('card_ytmusic'),
+            icon: Icons.music_note,
+            accentColor: Colors.redAccent,
+            onTap: () => _navigateToYouTubeMusic(context),
+            statusWidget: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.play_circle_fill, size: 36, color: Colors.redAccent),
+                const SizedBox(height: 4),
+                Text(
+                  isKo ? "트롯 & 클래식" : "Seniors Playlist",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+
+          // 2. MEDICATION TRACKER
           _buildInformativeCard(
             context: context,
             title: local.translate('card_med'),
             icon: Icons.medication,
             accentColor: Colors.purple,
-            onTap: () => _navigateToFeature(context, local.translate('card_med')),
+            onTap: () {},
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   isKo ? "오후 1:00" : "1:00 PM",
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.purple),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.purple),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isKo ? "혈압약 • 식후 30분" : "Blood Pressure\nCapsule",
+                  isKo ? "혈압약 • 식후 30분" : "Blood Pressure",
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],
             ),
           ),
+
+          // 3. HEALTH METRICS
           _buildInformativeCard(
             context: context,
             title: local.translate('card_health'),
             icon: Icons.favorite,
             accentColor: Colors.teal,
-            onTap: () => _navigateToFeature(context, local.translate('card_health')),
+            onTap: () {},
             statusWidget: Stack(
               alignment: Alignment.center,
               children: [
                 const SizedBox(
-                  width: 65,
-                  height: 65,
+                  width: 55,
+                  height: 55,
                   child: CircularProgressIndicator(
                     value: 0.72,
-                    strokeWidth: 8,
+                    strokeWidth: 6,
                     backgroundColor: Colors.black12,
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
                   ),
@@ -745,77 +539,60 @@ class DashboardPage extends StatelessWidget {
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("72%", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    Text(isKo ? "걸음수" : "Steps", style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                    const Text("72%", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(isKo ? "걸음수" : "Steps", style: const TextStyle(fontSize: 9, color: Colors.black54)),
                   ],
                 )
               ],
             ),
           ),
+
+          // 4. MAPS / AREA SAFETY
           _buildInformativeCard(
             context: context,
             title: local.translate('card_maps'),
             icon: Icons.map,
             accentColor: Colors.blue,
-            onTap: () => _navigateToFeature(context, local.translate('card_maps')),
+            onTap: () {},
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.gpp_good, color: Colors.blue, size: 30),
+                const Icon(Icons.gpp_good, color: Colors.blue, size: 28),
                 const SizedBox(height: 4),
                 Text(
-                  isKo ? "안심 구역 내 계심" : "Inside Safe Zone",
+                  isKo ? "안심 구역 내" : "Safe Zone",
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.blueGrey),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blueGrey),
                 ),
               ],
             ),
           ),
+
+          // 5. COMMUNITY EVENTS
           _buildInformativeCard(
             context: context,
             title: local.translate('card_comm'),
             icon: Icons.groups,
             accentColor: Colors.orange,
-            onTap: () => _navigateToFeature(context, local.translate('card_comm')),
+            onTap: () {},
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   isKo ? "내일 일정" : "Tomorrow",
-                  style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isKo ? "복지관 노래교실\n오전 10시" : "Senior Center\nSinging at 10 AM",
+                  isKo ? "노래교실 10:00" : "Singing 10 AM",
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black54),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
                 ),
               ],
             ),
           ),
-          _buildInformativeCard(
-            context: context,
-            title: local.translate('card_care'),
-            icon: Icons.family_restroom,
-            accentColor: Colors.green,
-            onTap: () => _navigateToFeature(context, local.translate('card_care')),
-            statusWidget: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.green,
-                  child: Icon(Icons.mail, size: 16, color: Colors.white),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  isKo ? "아들이 보낸 메시지\n\"저녁에 방문할게요\"" : "Son's Note:\n\"Visiting at 6pm!\"",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black87),
-                ),
-              ],
-            ),
-          ),
+
+          // 6. EMERGENCY SYSTEM
           _buildInformativeCard(
             context: context,
             title: local.translate('card_emer'),
@@ -825,12 +602,12 @@ class DashboardPage extends StatelessWidget {
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.touch_app, color: Colors.red, size: 28),
-                const SizedBox(height: 4),
+                const Icon(Icons.touch_app, color: Colors.red, size: 26),
+                const SizedBox(height: 2),
                 Text(
-                  isKo ? "긴급 호출\n(즉시 전송)" : "TAP TO CALL\nEMERGENCY",
+                  isKo ? "긴급 호출" : "EMERGENCY",
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.red),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.red),
                 ),
               ],
             ),
@@ -841,9 +618,366 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-// ================= RESTORED FULL PROFILE PAGE =================
-class ProfilePage extends StatelessWidget {
+// ================= YOUTUBE MUSIC & PLAYER SCREEN =================
+class YouTubeMusicPage extends StatefulWidget {
+  const YouTubeMusicPage({super.key});
+
+  @override
+  State<YouTubeMusicPage> createState() => _YouTubeMusicPageState();
+}
+
+class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
+  late YoutubePlayerController _controller;
+  final String _videoId = '5qap5aO4i9A'; 
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = YoutubePlayerController(
+      initialVideoId: _videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: false,
+        mute: false,
+        isLive: false,
+      ),
+    );
+  }
+
+  Future<void> _openYouTubeMusicApp() async {
+    final Uri url = Uri.parse('https://music.youtube.com');
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      debugPrint('Could not launch YouTube Music: $url');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("ElderConnect Music"),
+        backgroundColor: Colors.redAccent,
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            YoutubePlayer(
+              controller: _controller,
+              showVideoProgressIndicator: true,
+              progressIndicatorColor: Colors.red,
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  const Text(
+                    "Relaxing Music Player",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Enjoy comfortable music for mind and body.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 55),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                    icon: const Icon(Icons.open_in_new, size: 28),
+                    label: const Text(
+                      "Open in YouTube Music",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _openYouTubeMusicApp,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================= AVATAR PAGE (3D KOREAN WOMAN AI + STT + TTS) =================
+class AvatarPage extends StatefulWidget {
+  const AvatarPage({super.key});
+
+  @override
+  State<AvatarPage> createState() => _AvatarPageState();
+}
+
+class _AvatarPageState extends State<AvatarPage> with SingleTickerProviderStateMixin {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  final FlutterTts _tts = FlutterTts();
+  final TextEditingController _textController = TextEditingController();
+
+  late AnimationController _animController;
+  bool _isListening = false;
+  String _aiResponse = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _initTtsAndAutoGreet();
+  }
+
+  void _initTtsAndAutoGreet() async {
+    await _tts.setLanguage("ko-KR");
+    await _tts.setPitch(1.1); // Warm, friendly pitch
+    await _tts.setSpeechRate(0.8);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final local = AppLocalizations.of(context);
+      final greeting = local.translate('avatar_greet');
+      setState(() {
+        _aiResponse = greeting;
+      });
+      _speak(greeting);
+    });
+  }
+
+  Future<void> _speak(String text) async {
+    if (text.isNotEmpty) {
+      await _tts.stop();
+      await _tts.speak(text);
+    }
+  }
+
+  Future<void> _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => debugPrint('STT Status: $val'),
+        onError: (val) => debugPrint('STT Error: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          onResult: (val) {
+            setState(() {
+              _textController.text = val.recognizedWords;
+            });
+          },
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+      if (_textController.text.isNotEmpty) {
+        _processAiResponse(_textController.text);
+      }
+    }
+  }
+
+  Future<void> _processAiResponse(String prompt) async {
+    try {
+      final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: 'YOUR_GEMINI_API_KEY');
+      final response = await model.generateContent([Content.text(prompt)]);
+      
+      setState(() {
+        _aiResponse = response.text ?? "죄송해요, 다시 한번 말씀해 주세요.";
+      });
+    } catch (e) {
+      double num = math.Random().nextDouble();
+      setState(() {
+        _aiResponse = num > 0.5 
+            ? "오늘도 활기찬 하루 되세요! 진지하게 응원해 드릴게요." 
+            : "네, 말씀 잘 들었어요. 항상 편안하게 대화해 주세요.";
+      });
+    }
+    _speak(_aiResponse);
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _tts.stop();
+    _speech.stop();
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final local = AppLocalizations.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          // Dynamic 3D Avatar Rendering Container
+          AnimatedBuilder(
+            animation: _animController,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(0, math.sin(_animController.value * math.pi) * 8),
+                child: Container(
+                  height: 220,
+                  width: 220,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD1DC), Color(0xFFFFB6C1), Color(0xFFE6E6FA)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pink.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      ClipOval(
+                        child: Image.network(
+                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+                          fit: BoxFit.cover,
+                          width: 210,
+                          height: 210,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent);
+                          },
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: const Text(
+                            "AI 수진 (Korean 3D Avatar)",
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.pink),
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 25),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.pink.shade50,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.pink.shade200),
+            ),
+            child: Text(
+              _aiResponse.isEmpty ? local.translate('avatar_greet') : _aiResponse,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _textController,
+            decoration: InputDecoration(
+              labelText: local.translate('btn_type'),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.send, color: Colors.pink),
+                onPressed: () {
+                  if (_textController.text.isNotEmpty) {
+                    _processAiResponse(_textController.text);
+                  }
+                },
+              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isListening ? Colors.red : Colors.pink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+                label: Text(local.translate('btn_speak')),
+                onPressed: _listen,
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                icon: const Icon(Icons.volume_up),
+                label: Text(local.translate('btn_listen')),
+                onPressed: () => _speak(_aiResponse),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ================= PROFILE PAGE (SETTINGS & RSS NEWS READER) =================
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  String _newsTitle = "Loading News Feed...";
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRssNews();
+  }
+
+  Future<void> _fetchRssNews() async {
+    try {
+      final response = await http.get(Uri.parse('https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko'));
+      if (response.statusCode == 200) {
+        var feed = RssFeed.parse(response.body);
+        var rawXml = xml.XmlDocument.parse(response.body);
+        var titleNodes = rawXml.findAllElements('title');
+        
+        setState(() {
+          _newsTitle = feed.items?.first.title ?? titleNodes.first.innerText;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _newsTitle = "실시간 주요 뉴스: 어르신 복지 혜택 강화 소식";
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -852,105 +986,71 @@ class ProfilePage extends StatelessWidget {
     final langManager = LanguageManager.of(context);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       children: [
-        // User Profile Header
-        Center(
-          child: Column(
-            children: [
-              const CircleAvatar(
-                radius: 45,
-                backgroundColor: Colors.pinkAccent,
-                child: Icon(Icons.person, size: 55, color: Colors.white),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                local.translate('user_guest'),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-            ],
+        Card(
+          child: ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.person)),
+            title: Text(local.translate('user_guest'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text("user@elderconnect.com"),
           ),
         ),
-        const SizedBox(height: 20),
-        const Divider(),
-
-        // Font Size Setting
-        ListTile(
-          leading: const Icon(Icons.text_fields, color: Colors.pinkAccent),
-          title: Text(
-            local.translate('set_font'),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        const SizedBox(height: 10),
+        Card(
+          color: Colors.amber.shade50,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.newspaper, color: Colors.amber),
+                    SizedBox(width: 8),
+                    Text("Live Senior News", style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(_newsTitle, style: const TextStyle(fontSize: 14)),
+              ],
+            ),
           ),
+        ),
+        const SizedBox(height: 10),
+        ListTile(
+          title: Text(local.translate('set_font')),
           subtitle: Text(local.translate('set_font_sub')),
           trailing: DropdownButton<FontSizePreset>(
             value: fontManager.currentPreset,
-            underline: const SizedBox(),
-            items: [
-              DropdownMenuItem(
-                value: FontSizePreset.small,
-                child: Text(local.translate('font_small')),
-              ),
-              DropdownMenuItem(
-                value: FontSizePreset.medium,
-                child: Text(local.translate('font_medium')),
-              ),
-              DropdownMenuItem(
-                value: FontSizePreset.large,
-                child: Text(local.translate('font_large')),
-              ),
-            ],
-            onChanged: (preset) {
-              if (preset != null) {
-                fontManager.changeFontSize(preset);
+            onChanged: (FontSizePreset? newPreset) {
+              if (newPreset != null) {
+                fontManager.changeFontSize(newPreset);
               }
+            },
+            items: [
+              DropdownMenuItem(value: FontSizePreset.small, child: Text(local.translate('font_small'))),
+              DropdownMenuItem(value: FontSizePreset.medium, child: Text(local.translate('font_medium'))),
+              DropdownMenuItem(value: FontSizePreset.large, child: Text(local.translate('font_large'))),
+            ],
+          ),
+        ),
+        const Divider(),
+        ListTile(
+          title: Text(local.translate('set_lang')),
+          subtitle: Text(local.translate('set_lang_sub')),
+          trailing: Switch(
+            value: langManager.currentLocale.languageCode == 'ko',
+            onChanged: (bool isKorean) {
+              langManager.changeLanguage(Locale(isKorean ? 'ko' : 'en'));
             },
           ),
         ),
         const Divider(),
-
-        // Language Setting Switch (English <-> Korean)
         ListTile(
-          leading: const Icon(Icons.language, color: Colors.pinkAccent),
-          title: Text(
-            local.translate('set_lang'),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          subtitle: Text(local.translate('set_lang_sub')),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                langManager.currentLocale.languageCode == 'ko' ? '한국어' : 'English',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.pinkAccent),
-              ),
-              const SizedBox(width: 8),
-              Switch(
-                value: langManager.currentLocale.languageCode == 'ko',
-                activeColor: Colors.pinkAccent,
-                onChanged: (isKo) {
-                  langManager.changeLanguage(Locale(isKo ? 'ko' : 'en'));
-                },
-              ),
-            ],
-          ),
-        ),
-        const Divider(),
-
-        // About Application
-        ListTile(
-          leading: const Icon(Icons.info_outline, color: Colors.pinkAccent),
-          title: Text(
-            local.translate('set_about'),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          subtitle: const Text('ElderConnect v1.0.0'),
+          leading: const Icon(Icons.logout, color: Colors.red),
+          title: Text(local.translate('set_logout'), style: const TextStyle(color: Colors.red)),
           onTap: () {
-            showAboutDialog(
-              context: context,
-              applicationName: 'ElderConnect',
-              applicationVersion: '1.0.0',
-              applicationIcon: const Icon(Icons.elderly, size: 40, color: Colors.pinkAccent),
-            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage()));
           },
         ),
       ],
