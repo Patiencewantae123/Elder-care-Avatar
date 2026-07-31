@@ -76,6 +76,7 @@ class AppLocalizations {
       'font_large': 'Large Fonts (Recommended)',
       'role_senior': 'Senior',
       'role_guardian': 'Guardian',
+      'news_title': 'Latest News Feed',
     },
     'ko': {
       'title': '엘더커넥트',
@@ -116,6 +117,7 @@ class AppLocalizations {
       'font_large': '큰 글꼴 (추천)',
       'role_senior': '어르신',
       'role_guardian': '보호자',
+      'news_title': '실시간 주요 뉴스',
     },
   };
 
@@ -294,7 +296,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    // Automatically skip login and proceed directly to home page
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Navigator.pushReplacement(
         context,
@@ -352,6 +353,333 @@ class _HomePageState extends State<HomePage> {
             currentIndex = index;
           });
         },
+      ),
+    );
+  }
+}
+
+// ================= AVATAR PAGE (BLINKS & MOVES MOUTH WHILE TALKING) =================
+class AvatarPage extends StatefulWidget {
+  const AvatarPage({super.key});
+
+  @override
+  State<AvatarPage> createState() => _AvatarPageState();
+}
+
+class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  final FlutterTts _tts = FlutterTts();
+  final TextEditingController _textController = TextEditingController();
+
+  late AnimationController _floatController;
+  late AnimationController _mouthController;
+  late AnimationController _blinkController;
+
+  bool _isListening = false;
+  bool _isSpeaking = false;
+  String _aiResponse = "";
+
+  @override
+  void initState() {
+    super.initState();
+
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(reverse: true);
+
+    _mouthController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    );
+
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+
+    _startRandomBlinking();
+    _initTtsAndAutoGreet();
+  }
+
+  void _startRandomBlinking() async {
+    while (mounted) {
+      await Future.delayed(Duration(milliseconds: 2500 + math.Random().nextInt(2500)));
+      if (mounted) {
+        await _blinkController.forward();
+        await _blinkController.reverse();
+      }
+    }
+  }
+
+  void _initTtsAndAutoGreet() async {
+    await _tts.setLanguage("ko-KR");
+    await _tts.setPitch(1.1);
+    await _tts.setSpeechRate(0.8);
+
+    _tts.setStartHandler(() {
+      if (mounted) {
+        setState(() => _isSpeaking = true);
+        _mouthController.repeat(reverse: true);
+      }
+    });
+
+    _tts.setCompletionHandler(() {
+      if (mounted) {
+        setState(() => _isSpeaking = false);
+        _mouthController.stop();
+        _mouthController.reset();
+      }
+    });
+
+    _tts.setErrorHandler((msg) {
+      if (mounted) {
+        setState(() => _isSpeaking = false);
+        _mouthController.stop();
+        _mouthController.reset();
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final local = AppLocalizations.of(context);
+      final greeting = local.translate('avatar_greet');
+      setState(() {
+        _aiResponse = greeting;
+      });
+      _speak(greeting);
+    });
+  }
+
+  Future<void> _speak(String text) async {
+    if (text.isNotEmpty) {
+      await _tts.stop();
+      await _tts.speak(text);
+    }
+  }
+
+  Future<void> _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => debugPrint('STT Status: $val'),
+        onError: (val) => debugPrint('STT Error: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          onResult: (val) {
+            setState(() {
+              _textController.text = val.recognizedWords;
+            });
+          },
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+      if (_textController.text.isNotEmpty) {
+        _processAiResponse(_textController.text);
+      }
+    }
+  }
+
+  Future<void> _processAiResponse(String prompt) async {
+    try {
+      final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: 'YOUR_GEMINI_API_KEY');
+      final response = await model.generateContent([Content.text(prompt)]);
+      
+      setState(() {
+        _aiResponse = response.text ?? "죄송해요, 다시 한번 말씀해 주세요.";
+      });
+    } catch (e) {
+      double num = math.Random().nextDouble();
+      setState(() {
+        _aiResponse = num > 0.5 
+            ? "오늘도 활기찬 하루 되세요! 진지하게 응원해 드릴게요." 
+            : "네, 말씀 잘 들었어요. 항상 편안하게 대화해 주세요.";
+      });
+    }
+    _speak(_aiResponse);
+  }
+
+  @override
+  void dispose() {
+    _floatController.dispose();
+    _mouthController.dispose();
+    _blinkController.dispose();
+    _tts.stop();
+    _speech.stop();
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final local = AppLocalizations.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          AnimatedBuilder(
+            animation: Listenable.merge([_floatController, _mouthController, _blinkController]),
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(0, math.sin(_floatController.value * math.pi) * 6),
+                child: Container(
+                  height: 220,
+                  width: 220,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD1DC), Color(0xFFFFB6C1), Color(0xFFE6E6FA)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pink.withOpacity(_isSpeaking ? 0.6 : 0.3),
+                        blurRadius: _isSpeaking ? 28 : 18,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      ClipOval(
+                        child: Image.network(
+                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+                          fit: BoxFit.cover,
+                          width: 210,
+                          height: 210,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent);
+                          },
+                        ),
+                      ),
+                      Positioned(
+                        top: 82,
+                        child: Row(
+                          children: [
+                            _buildEyelid(_blinkController.value),
+                            const SizedBox(width: 32),
+                            _buildEyelid(_blinkController.value),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 68,
+                        child: Container(
+                          width: 22,
+                          height: _isSpeaking ? (3 + (_mouthController.value * 12)) : 3,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8B263E),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFD47A85), width: 1),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(15),
+                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isSpeaking ? Icons.record_voice_over : Icons.face,
+                                size: 14,
+                                color: Colors.pink,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _isSpeaking ? "말하는 중..." : "AI 수진",
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.pink),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 25),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.pink.shade50,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.pink.shade200),
+            ),
+            child: Text(
+              _aiResponse.isEmpty ? local.translate('avatar_greet') : _aiResponse,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _textController,
+            decoration: InputDecoration(
+              labelText: local.translate('btn_type'),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.send, color: Colors.pink),
+                onPressed: () {
+                  if (_textController.text.isNotEmpty) {
+                    _processAiResponse(_textController.text);
+                  }
+                },
+              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isListening ? Colors.red : Colors.pink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+                label: Text(local.translate('btn_speak')),
+                onPressed: _listen,
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                icon: const Icon(Icons.volume_up),
+                label: Text(local.translate('btn_listen')),
+                onPressed: () => _speak(_aiResponse),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEyelid(double blinkProgress) {
+    return Container(
+      width: 24,
+      height: 14 * blinkProgress,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE2A898),
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }
@@ -471,7 +799,6 @@ class DashboardPage extends StatelessWidget {
         mainAxisSpacing: 12,
         childAspectRatio: 0.95,
         children: [
-          // 1. YOUTUBE MUSIC INTEGRATION
           _buildInformativeCard(
             context: context,
             title: local.translate('card_ytmusic'),
@@ -491,8 +818,6 @@ class DashboardPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // 2. MEDICATION TRACKER
           _buildInformativeCard(
             context: context,
             title: local.translate('card_med'),
@@ -515,8 +840,6 @@ class DashboardPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // 3. HEALTH METRICS
           _buildInformativeCard(
             context: context,
             title: local.translate('card_health'),
@@ -546,8 +869,6 @@ class DashboardPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // 4. MAPS / AREA SAFETY
           _buildInformativeCard(
             context: context,
             title: local.translate('card_maps'),
@@ -567,8 +888,6 @@ class DashboardPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // 5. COMMUNITY EVENTS
           _buildInformativeCard(
             context: context,
             title: local.translate('card_comm'),
@@ -591,8 +910,6 @@ class DashboardPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // 6. EMERGENCY SYSTEM
           _buildInformativeCard(
             context: context,
             title: local.translate('card_emer'),
@@ -618,7 +935,7 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-// ================= YOUTUBE MUSIC & PLAYER SCREEN =================
+// ================= YOUTUBE MUSIC SCREEN =================
 class YouTubeMusicPage extends StatefulWidget {
   const YouTubeMusicPage({super.key});
 
@@ -711,238 +1028,6 @@ class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
   }
 }
 
-// ================= AVATAR PAGE (3D KOREAN WOMAN AI + STT + TTS) =================
-class AvatarPage extends StatefulWidget {
-  const AvatarPage({super.key});
-
-  @override
-  State<AvatarPage> createState() => _AvatarPageState();
-}
-
-class _AvatarPageState extends State<AvatarPage> with SingleTickerProviderStateMixin {
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  final FlutterTts _tts = FlutterTts();
-  final TextEditingController _textController = TextEditingController();
-
-  late AnimationController _animController;
-  bool _isListening = false;
-  String _aiResponse = "";
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-
-    _initTtsAndAutoGreet();
-  }
-
-  void _initTtsAndAutoGreet() async {
-    await _tts.setLanguage("ko-KR");
-    await _tts.setPitch(1.1); // Warm, friendly pitch
-    await _tts.setSpeechRate(0.8);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final local = AppLocalizations.of(context);
-      final greeting = local.translate('avatar_greet');
-      setState(() {
-        _aiResponse = greeting;
-      });
-      _speak(greeting);
-    });
-  }
-
-  Future<void> _speak(String text) async {
-    if (text.isNotEmpty) {
-      await _tts.stop();
-      await _tts.speak(text);
-    }
-  }
-
-  Future<void> _listen() async {
-    if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (val) => debugPrint('STT Status: $val'),
-        onError: (val) => debugPrint('STT Error: $val'),
-      );
-      if (available) {
-        setState(() => _isListening = true);
-        _speech.listen(
-          onResult: (val) {
-            setState(() {
-              _textController.text = val.recognizedWords;
-            });
-          },
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-      if (_textController.text.isNotEmpty) {
-        _processAiResponse(_textController.text);
-      }
-    }
-  }
-
-  Future<void> _processAiResponse(String prompt) async {
-    try {
-      final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: 'YOUR_GEMINI_API_KEY');
-      final response = await model.generateContent([Content.text(prompt)]);
-      
-      setState(() {
-        _aiResponse = response.text ?? "죄송해요, 다시 한번 말씀해 주세요.";
-      });
-    } catch (e) {
-      double num = math.Random().nextDouble();
-      setState(() {
-        _aiResponse = num > 0.5 
-            ? "오늘도 활기찬 하루 되세요! 진지하게 응원해 드릴게요." 
-            : "네, 말씀 잘 들었어요. 항상 편안하게 대화해 주세요.";
-      });
-    }
-    _speak(_aiResponse);
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    _tts.stop();
-    _speech.stop();
-    _textController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final local = AppLocalizations.of(context);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          // Dynamic 3D Avatar Rendering Container
-          AnimatedBuilder(
-            animation: _animController,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(0, math.sin(_animController.value * math.pi) * 8),
-                child: Container(
-                  height: 220,
-                  width: 220,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFD1DC), Color(0xFFFFB6C1), Color(0xFFE6E6FA)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.pink.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      ClipOval(
-                        child: Image.network(
-                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
-                          fit: BoxFit.cover,
-                          width: 210,
-                          height: 210,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent);
-                          },
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: const Text(
-                            "AI 수진 (Korean 3D Avatar)",
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.pink),
-                          ),
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 25),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.pink.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.pink.shade200),
-            ),
-            child: Text(
-              _aiResponse.isEmpty ? local.translate('avatar_greet') : _aiResponse,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.4),
-            ),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _textController,
-            decoration: InputDecoration(
-              labelText: local.translate('btn_type'),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.send, color: Colors.pink),
-                onPressed: () {
-                  if (_textController.text.isNotEmpty) {
-                    _processAiResponse(_textController.text);
-                  }
-                },
-              ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isListening ? Colors.red : Colors.pink,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                ),
-                icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
-                label: Text(local.translate('btn_speak')),
-                onPressed: _listen,
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                ),
-                icon: const Icon(Icons.volume_up),
-                label: Text(local.translate('btn_listen')),
-                onPressed: () => _speak(_aiResponse),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ================= PROFILE PAGE (SETTINGS & RSS NEWS READER) =================
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -1003,21 +1088,25 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.newspaper, color: Colors.amber),
-                    SizedBox(width: 8),
-                    Text("Live Senior News", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Icon(Icons.newspaper, color: Colors.amber),
+                    const SizedBox(width: 8),
+                    Text(
+                      local.translate('news_title'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(_newsTitle, style: const TextStyle(fontSize: 14)),
+                const SizedBox(height: 8),
+                Text(_newsTitle),
               ],
             ),
           ),
         ),
         const SizedBox(height: 10),
         ListTile(
+          leading: const Icon(Icons.format_size),
           title: Text(local.translate('set_font')),
           subtitle: Text(local.translate('set_font_sub')),
           trailing: DropdownButton<FontSizePreset>(
@@ -1028,30 +1117,44 @@ class _ProfilePageState extends State<ProfilePage> {
               }
             },
             items: [
-              DropdownMenuItem(value: FontSizePreset.small, child: Text(local.translate('font_small'))),
-              DropdownMenuItem(value: FontSizePreset.medium, child: Text(local.translate('font_medium'))),
-              DropdownMenuItem(value: FontSizePreset.large, child: Text(local.translate('font_large'))),
+              DropdownMenuItem(
+                value: FontSizePreset.small,
+                child: Text(local.translate('font_small')),
+              ),
+              DropdownMenuItem(
+                value: FontSizePreset.medium,
+                child: Text(local.translate('font_medium')),
+              ),
+              DropdownMenuItem(
+                value: FontSizePreset.large,
+                child: Text(local.translate('font_large')),
+              ),
             ],
           ),
         ),
         const Divider(),
         ListTile(
+          leading: const Icon(Icons.language),
           title: Text(local.translate('set_lang')),
           subtitle: Text(local.translate('set_lang_sub')),
-          trailing: Switch(
-            value: langManager.currentLocale.languageCode == 'ko',
-            onChanged: (bool isKorean) {
-              langManager.changeLanguage(Locale(isKorean ? 'ko' : 'en'));
+          trailing: DropdownButton<Locale>(
+            value: langManager.currentLocale,
+            onChanged: (Locale? newLocale) {
+              if (newLocale != null) {
+                langManager.changeLanguage(newLocale);
+              }
             },
+            items: const [
+              DropdownMenuItem(
+                value: Locale('ko'),
+                child: Text("한국어"),
+              ),
+              DropdownMenuItem(
+                value: Locale('en'),
+                child: Text("English"),
+              ),
+            ],
           ),
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.logout, color: Colors.red),
-          title: Text(local.translate('set_logout'), style: const TextStyle(color: Colors.red)),
-          onTap: () {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage()));
-          },
         ),
       ],
     );
