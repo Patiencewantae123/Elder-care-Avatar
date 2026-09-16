@@ -636,6 +636,435 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+<<<<<<< Updated upstream
+=======
+// ================= FULLY REACTIVE AVATAR PAGE (3D INTERACTIVE TILT) =================
+enum AvatarState { idle, listening, thinking, speaking }
+
+class AvatarPage extends StatefulWidget {
+  const AvatarPage({super.key});
+
+  @override
+  State<AvatarPage> createState() => _AvatarPageState();
+}
+
+class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  final FlutterTts _tts = FlutterTts();
+  final TextEditingController _textController = TextEditingController();
+
+  AvatarState _currentState = AvatarState.idle;
+  String _aiResponse = "";
+
+  Offset _dragOffset = Offset.zero;
+
+  late AnimationController _breathingController;
+  late AnimationController _talkingMouthController;
+  late AnimationController _blinkController;
+  late AnimationController _pulseGlowController;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _breathingController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
+
+    _talkingMouthController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 140),
+    );
+
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+    );
+
+    _pulseGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _startRandomBlinking();
+    _initTtsAndAutoGreet();
+  }
+
+  void _startRandomBlinking() async {
+    while (mounted) {
+      await Future.delayed(Duration(milliseconds: 2000 + math.Random().nextInt(3000)));
+      if (mounted) {
+        await _blinkController.forward();
+        await _blinkController.reverse();
+      }
+    }
+  }
+
+  void _initTtsAndAutoGreet() async {
+    await _tts.setLanguage("ko-KR");
+    await _tts.setPitch(1.1);
+    await _tts.setSpeechRate(0.85);
+
+    _tts.setStartHandler(() {
+      if (mounted) {
+        setState(() => _currentState = AvatarState.speaking);
+        _talkingMouthController.repeat(reverse: true);
+        _pulseGlowController.repeat(reverse: true);
+      }
+    });
+
+    _tts.setCompletionHandler(() {
+      if (mounted) {
+        setState(() => _currentState = AvatarState.idle);
+        _talkingMouthController.stop();
+        _talkingMouthController.reset();
+        _pulseGlowController.stop();
+        _pulseGlowController.reset();
+      }
+    });
+
+    _tts.setErrorHandler((msg) {
+      if (mounted) {
+        setState(() => _currentState = AvatarState.idle);
+        _talkingMouthController.stop();
+        _pulseGlowController.stop();
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final local = AppLocalizations.of(context);
+      final greeting = local.translate('avatar_greet');
+      setState(() => _aiResponse = greeting);
+      _speak(greeting);
+    });
+  }
+
+  Future<void> _speak(String text) async {
+    if (text.isNotEmpty) {
+      await _tts.stop();
+      await _tts.speak(text);
+    }
+  }
+
+  Future<void> _listen() async {
+    if (_currentState != AvatarState.listening) {
+      bool available = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (_currentState == AvatarState.listening) {
+              setState(() => _currentState = AvatarState.idle);
+              _pulseGlowController.stop();
+            }
+          }
+        },
+        onError: (error) => setState(() => _currentState = AvatarState.idle),
+      );
+
+      if (available) {
+        setState(() => _currentState = AvatarState.listening);
+        _pulseGlowController.repeat(reverse: true);
+        _speech.listen(
+          onResult: (val) {
+            setState(() {
+              _textController.text = val.recognizedWords;
+            });
+          },
+        );
+      }
+    } else {
+      setState(() => _currentState = AvatarState.idle);
+      _pulseGlowController.stop();
+      _speech.stop();
+      if (_textController.text.isNotEmpty) {
+        _processAiResponse(_textController.text);
+      }
+    }
+  }
+
+  Future<void> _processAiResponse(String prompt) async {
+    setState(() => _currentState = AvatarState.thinking);
+    _pulseGlowController.repeat(reverse: true);
+
+    try {
+      final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: 'YOUR_GEMINI_API_KEY');
+      final response = await model.generateContent([Content.text(prompt)]);
+      setState(() {
+        _aiResponse = response.text ?? "죄송해요, 다시 한번 말씀해 주세요.";
+      });
+    } catch (e) {
+      double num = math.Random().nextDouble();
+      setState(() {
+        _aiResponse = num > 0.5
+            ? "오늘도 활기찬 하루 되세요! 진지하게 응원해 드릴게요."
+            : "네, 말씀 잘 들었어요. 항상 편안하게 대화해 주세요.";
+      });
+    }
+
+    _pulseGlowController.stop();
+    _speak(_aiResponse);
+  }
+
+  @override
+  void dispose() {
+    _breathingController.dispose();
+    _talkingMouthController.dispose();
+    _blinkController.dispose();
+    _pulseGlowController.dispose();
+    _tts.stop();
+    _speech.stop();
+    _textController.dispose();
+    super.dispose();
+  }
+
+  Color _getAuraColor() {
+    switch (_currentState) {
+      case AvatarState.listening:
+        return Colors.redAccent;
+      case AvatarState.thinking:
+        return Colors.orangeAccent;
+      case AvatarState.speaking:
+        return Colors.pinkAccent;
+      case AvatarState.idle:
+      default:
+        return Colors.pink.shade200;
+    }
+  }
+
+  String _getStateLabel() {
+    switch (_currentState) {
+      case AvatarState.listening:
+        return "듣는 중...";
+      case AvatarState.thinking:
+        return "생각하는 중...";
+      case AvatarState.speaking:
+        return "말하는 중...";
+      case AvatarState.idle:
+      default:
+        return "AI 수진";
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final local = AppLocalizations.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          GestureDetector(
+            onPanUpdate: (details) {
+              setState(() {
+                double newX = _dragOffset.dx + details.delta.dx;
+                double newY = _dragOffset.dy + details.delta.dy;
+                _dragOffset = Offset(
+                  newX.clamp(-120.0, 120.0),
+                  newY.clamp(-120.0, 120.0),
+                );
+              });
+            },
+            onPanEnd: (_) {
+              setState(() => _dragOffset = Offset.zero);
+            },
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                _breathingController,
+                _talkingMouthController,
+                _blinkController,
+                _pulseGlowController,
+              ]),
+              builder: (context, child) {
+                final double tiltX = -_dragOffset.dy * 0.005;
+                final double tiltY = _dragOffset.dx * 0.005;
+                final double breathOffset = math.sin(_breathingController.value * math.pi * 2) * 4;
+                final double pulseVal = _pulseGlowController.value * 12;
+
+                return Transform(
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.0012)
+                    ..rotateX(tiltX)
+                    ..rotateY(tiltY)
+                    ..translate(0.0, breathOffset, 0.0),
+                  alignment: Alignment.center,
+                  child: Container(
+                    height: 240,
+                    width: 240,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [_getAuraColor().withOpacity(0.8), Colors.white],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _getAuraColor().withOpacity(0.5),
+                          blurRadius: 20 + pulseVal,
+                          spreadRadius: 3 + (pulseVal / 2),
+                          offset: Offset(_dragOffset.dx * 0.1, _dragOffset.dy * 0.1),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ClipOval(
+                          child: Image.network(
+                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+                            fit: BoxFit.cover,
+                            width: 220,
+                            height: 220,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent),
+                          ),
+                        ),
+                        Positioned(
+                          top: 86 + (_dragOffset.dy * 0.05),
+                          left: 74 + (_dragOffset.dx * 0.05),
+                          child: Row(
+                            children: [
+                              _buildReactiveEye(_blinkController.value),
+                              const SizedBox(width: 28),
+                              _buildReactiveEye(_blinkController.value),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 70 - (_dragOffset.dy * 0.05),
+                          child: Transform.scale(
+                            scaleX: 1.0 + (_talkingMouthController.value * 0.2),
+                            child: Container(
+                              width: 20,
+                              height: _currentState == AvatarState.speaking
+                                  ? (2 + (_talkingMouthController.value * 14))
+                                  : 2,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B263E),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFD47A85), width: 1),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 8,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: _getAuraColor(), width: 1.5),
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _getAuraColor(),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _getStateLabel(),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: _getAuraColor(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 25),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: _getAuraColor().withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _getAuraColor().withOpacity(0.4)),
+            ),
+            child: Text(
+              _aiResponse.isEmpty ? local.translate('avatar_greet') : _aiResponse,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _textController,
+            decoration: InputDecoration(
+              labelText: local.translate('btn_type'),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.send, color: Colors.pink),
+                onPressed: () {
+                  if (_textController.text.isNotEmpty) {
+                    _processAiResponse(_textController.text);
+                  }
+                },
+              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _currentState == AvatarState.listening ? Colors.red : Colors.pink,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                icon: Icon(_currentState == AvatarState.listening ? Icons.mic_off : Icons.mic),
+                label: Text(local.translate('btn_speak')),
+                onPressed: _listen,
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                icon: const Icon(Icons.volume_up),
+                label: Text(local.translate('btn_listen')),
+                onPressed: () => _speak(_aiResponse),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReactiveEye(double blinkProgress) {
+    return Container(
+      width: 22,
+      height: 12 * blinkProgress,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE2A898),
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+  }
+}
+
+>>>>>>> Stashed changes
 // ================= DASHBOARD PAGE =================
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
@@ -890,6 +1319,7 @@ class DashboardPage extends StatelessWidget {
             title: local.translate('card_emer'),
             icon: Icons.warning,
             isAlert: true,
+<<<<<<< Updated upstream
             onTap: () => _triggerEmergencySystem(context, local),
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -903,6 +1333,10 @@ class DashboardPage extends StatelessWidget {
                 ),
               ],
             ),
+=======
+            onTap: () {},
+            statusWidget: const Icon(Icons.touch_app, color: Colors.red, size: 36),
+>>>>>>> Stashed changes
           ),
         ],
       ),
@@ -1718,7 +2152,7 @@ class AvatarPainter extends CustomPainter {
   bool shouldRepaint(covariant AvatarPainter oldDelegate) => true;
 }
 
-// ================= PROFILE / SETTINGS PAGE =================
+// ================= PROFILE PAGE =================
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
@@ -1821,6 +2255,7 @@ class ProfilePage extends StatelessWidget {
 
     return ListView(
       children: [
+<<<<<<< Updated upstream
         const SizedBox(height: 30),
         const CircleAvatar(
           radius: 50,
@@ -1831,10 +2266,32 @@ class ProfilePage extends StatelessWidget {
           child: Text(
             local.translate('user_guest'),
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
+=======
+        ListTile(
+          leading: const CircleAvatar(radius: 28, child: Icon(Icons.person, size: 32)),
+          title: Text(local.translate('user_guest'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          subtitle: Text(local.translate('role_senior')),
         ),
         const Divider(),
         ListTile(
+          leading: const Icon(Icons.format_size),
+          title: Text(local.translate('set_font')),
+          subtitle: Text(local.translate('set_font_sub')),
+          trailing: DropdownButton<FontSizePreset>(
+            value: fontManager.currentPreset,
+            onChanged: (val) {
+              if (val != null) fontManager.changeFontSize(val);
+            },
+            items: [
+              DropdownMenuItem(value: FontSizePreset.small, child: Text(local.translate('font_small'))),
+              DropdownMenuItem(value: FontSizePreset.medium, child: Text(local.translate('font_medium'))),
+              DropdownMenuItem(value: FontSizePreset.large, child: Text(local.translate('font_large'))),
+            ],
+>>>>>>> Stashed changes
+          ),
+        ),
+        ListTile(
+<<<<<<< Updated upstream
           leading: const Icon(Icons.text_fields),
           title: Text(local.translate('set_font')),
           subtitle: Text(local.translate('set_font_sub')),
@@ -1880,6 +2337,21 @@ class ProfilePage extends StatelessWidget {
               ),
             );
           },
+=======
+          leading: const Icon(Icons.language),
+          title: Text(local.translate('set_lang')),
+          subtitle: Text(local.translate('set_lang_sub')),
+          trailing: DropdownButton<Locale>(
+            value: langManager.currentLocale,
+            onChanged: (val) {
+              if (val != null) langManager.changeLanguage(val);
+            },
+            items: const [
+              DropdownMenuItem(value: Locale('ko'), child: Text("한국어")),
+              DropdownMenuItem(value: Locale('en'), child: Text("English")),
+            ],
+          ),
+>>>>>>> Stashed changes
         ),
       ],
     );
