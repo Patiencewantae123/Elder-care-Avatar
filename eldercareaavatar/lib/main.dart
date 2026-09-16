@@ -4,13 +4,8 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:math' as math;
-import 'package:http/http.dart' as http;
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:webfeed_plus/webfeed_plus.dart';
-import 'package:xml/xml.dart' as xml;
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:model_viewer_plus/model_viewer_plus.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   KakaoSdk.init(nativeAppKey: 'YOUR_KAKAO_NATIVE_APP_KEY');
@@ -47,10 +42,10 @@ class AppLocalizations {
       'nav_home': 'Home',
       'nav_dash': 'Dashboard',
       'nav_profile': 'Profile',
-      'avatar_greet': '안녕하세요! 오늘 기분은 어떠신가요? 반가워요!',
-      'btn_speak': '말하기',
-      'btn_type': '메시지 입력',
-      'btn_listen': '듣기',
+      'avatar_greet': 'Hello! How are you feeling today? Glad to see you!',
+      'btn_speak': 'Speak',
+      'btn_type': 'Enter Message',
+      'btn_listen': 'Listen',
       'card_med': 'Medication',
       'card_health': 'Health',
       'card_maps': 'Maps',
@@ -341,7 +336,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ================= FULLY REACTIVE AVATAR PAGE =================
+// ================= FULLY REACTIVE AVATAR PAGE (3D INTERACTIVE TILT) =================
 enum AvatarState { idle, listening, thinking, speaking }
 
 class AvatarPage extends StatefulWidget {
@@ -358,7 +353,9 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
 
   AvatarState _currentState = AvatarState.idle;
   String _aiResponse = "";
-  Offset _pointerOffset = Offset.zero;
+
+  // 3D Drag & Tilt Offset State
+  Offset _dragOffset = Offset.zero;
 
   late AnimationController _breathingController;
   late AnimationController _talkingMouthController;
@@ -556,16 +553,22 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
       child: Column(
         children: [
           const SizedBox(height: 10),
-          MouseRegion(
-            onHover: (event) {
+          
+          // Gesture detector allows user to touch and rotate photo in 3D
+          GestureDetector(
+            onPanUpdate: (details) {
               setState(() {
-                _pointerOffset = Offset(
-                  (event.localPosition.dx - 110) / 110,
-                  (event.localPosition.dy - 110) / 110,
+                double newX = _dragOffset.dx + details.delta.dx;
+                double newY = _dragOffset.dy + details.delta.dy;
+                _dragOffset = Offset(
+                  newX.clamp(-120.0, 120.0),
+                  newY.clamp(-120.0, 120.0),
                 );
               });
             },
-            onExit: (_) => setState(() => _pointerOffset = Offset.zero),
+            onPanEnd: (_) {
+              setState(() => _dragOffset = Offset.zero);
+            },
             child: AnimatedBuilder(
               animation: Listenable.merge([
                 _breathingController,
@@ -574,21 +577,21 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
                 _pulseGlowController,
               ]),
               builder: (context, child) {
-                final double tiltX = -_pointerOffset.dy * 0.15;
-                final double tiltY = _pointerOffset.dx * 0.15;
-                final double breathOffset = math.sin(_breathingController.value * math.pi * 2) * 5;
+                final double tiltX = -_dragOffset.dy * 0.005; 
+                final double tiltY = _dragOffset.dx * 0.005;
+                final double breathOffset = math.sin(_breathingController.value * math.pi * 2) * 4;
                 final double pulseVal = _pulseGlowController.value * 12;
 
                 return Transform(
                   transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.001)
+                    ..setEntry(3, 2, 0.0012)
                     ..rotateX(tiltX)
                     ..rotateY(tiltY)
                     ..translate(0.0, breathOffset, 0.0),
                   alignment: Alignment.center,
                   child: Container(
-                    height: 220,
-                    width: 220,
+                    height: 240,
+                    width: 240,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
@@ -599,8 +602,9 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
                       boxShadow: [
                         BoxShadow(
                           color: _getAuraColor().withOpacity(0.5),
-                          blurRadius: 18 + pulseVal,
-                          spreadRadius: 2 + (pulseVal / 2),
+                          blurRadius: 20 + pulseVal,
+                          spreadRadius: 3 + (pulseVal / 2),
+                          offset: Offset(_dragOffset.dx * 0.1, _dragOffset.dy * 0.1),
                         ),
                       ],
                     ),
@@ -611,15 +615,17 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
                           child: Image.network(
                             'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
                             fit: BoxFit.cover,
-                            width: 205,
-                            height: 205,
+                            width: 220,
+                            height: 220,
                             errorBuilder: (context, error, stackTrace) =>
                                 const Icon(Icons.face_3, size: 120, color: Colors.pinkAccent),
                           ),
                         ),
+                        
+                        // Parallax Eyes
                         Positioned(
-                          top: 80 + (_pointerOffset.dy * 3),
-                          left: 68 + (_pointerOffset.dx * 5),
+                          top: 86 + (_dragOffset.dy * 0.05),
+                          left: 74 + (_dragOffset.dx * 0.05),
                           child: Row(
                             children: [
                               _buildReactiveEye(_blinkController.value),
@@ -628,8 +634,10 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
                             ],
                           ),
                         ),
+
+                        // Parallax Mouth
                         Positioned(
-                          bottom: 66 - (_pointerOffset.dy * 2),
+                          bottom: 70 - (_dragOffset.dy * 0.05),
                           child: Transform.scale(
                             scaleX: 1.0 + (_talkingMouthController.value * 0.2),
                             child: Container(
@@ -645,6 +653,8 @@ class _AvatarPageState extends State<AvatarPage> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
+
+                        // Status Badge
                         Positioned(
                           bottom: 8,
                           child: AnimatedContainer(
@@ -842,9 +852,7 @@ class DashboardPage extends StatelessWidget {
             title: local.translate('card_ytmusic'),
             icon: Icons.music_note,
             accentColor: Colors.redAccent,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const YouTubeMusicPage()));
-            },
+            onTap: () {},
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -910,7 +918,7 @@ class DashboardPage extends StatelessWidget {
             ),
           ),
           _buildInformativeCard(
-            context: context,
+            context: context,5
             title: local.translate('card_maps'),
             icon: Icons.map,
             accentColor: Colors.blue,
@@ -954,30 +962,17 @@ class DashboardPage extends StatelessWidget {
             context: context,
             title: local.translate('card_emer'),
             icon: Icons.warning,
+            accentColor: Colors.red,
             isAlert: true,
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  icon: const Icon(Icons.gpp_maybe, size: 50, color: Colors.red),
-                  title: Text(local.translate('card_emer'), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                  content: const Text("Connecting to emergency services and caregiver...", textAlign: TextAlign.center),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: Text(local.translate('cancel'))),
-                  ],
-                ),
-              );
-            },
+            onTap: () {},
             statusWidget: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.touch_app, color: Colors.red, size: 26),
-                const SizedBox(height: 2),
+                const Icon(Icons.sos, size: 32, color: Colors.red),
                 Text(
-                  isKo ? "긴급 호출" : "EMERGENCY",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.red),
-                ),
+                  isKo ? "원터치 구조" : "One-Touch SOS",
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red),
+                )
               ],
             ),
           ),
@@ -987,110 +982,9 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-// ================= YOUTUBE MUSIC SCREEN =================
-class YouTubeMusicPage extends StatefulWidget {
-  const YouTubeMusicPage({super.key});
-
-  @override
-  State<YouTubeMusicPage> createState() => _YouTubeMusicPageState();
-}
-
-class _YouTubeMusicPageState extends State<YouTubeMusicPage> {
-  late YoutubePlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = YoutubePlayerController(
-      initialVideoId: '5qap5aO4i9A',
-      flags: const YoutubePlayerFlags(autoPlay: false, mute: false),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("ElderConnect Music"),
-        backgroundColor: Colors.redAccent,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            YoutubePlayer(controller: _controller, showVideoProgressIndicator: true),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                children: [
-                  const Text("Relaxing Music Player", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  const Text("Enjoy comfortable music for mind and body.", textAlign: TextAlign.center),
-                  const SizedBox(height: 30),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 55),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    ),
-                    icon: const Icon(Icons.open_in_new),
-                    label: const Text("Open in YouTube Music", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    onPressed: () async {
-                      final Uri url = Uri.parse('https://music.youtube.com');
-                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ================= PROFILE PAGE =================
-class ProfilePage extends StatefulWidget {
+// ================= PROFILE / SETTINGS PAGE =================
+class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
-
-  @override
-  State<ProfilePage> createState() => _ProfilePageState();
-}
-
-class _ProfilePageState extends State<ProfilePage> {
-  String _newsTitle = "Loading News Feed...";
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchRssNews();
-  }
-
-  Future<void> _fetchRssNews() async {
-    try {
-      final response = await http.get(Uri.parse('https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko'));
-      if (response.statusCode == 200) {
-        var feed = RssFeed.parse(response.body);
-        var rawXml = xml.XmlDocument.parse(response.body);
-        var titleNodes = rawXml.findAllElements('title');
-        setState(() {
-          _newsTitle = feed.items?.first.title ?? titleNodes.first.innerText;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _newsTitle = "실시간 주요 뉴스: 어르신 복지 혜택 강화 소식";
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1101,65 +995,43 @@ class _ProfilePageState extends State<ProfilePage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          child: ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person)),
-            title: Text(local.translate('user_guest'), style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text("user@elderconnect.com"),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          color: Colors.amber.shade50,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.newspaper, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Text(local.translate('news_title'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(_newsTitle),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
         ListTile(
-          leading: const Icon(Icons.format_size),
+          leading: const Icon(Icons.format_size, color: Colors.pink),
           title: Text(local.translate('set_font')),
           subtitle: Text(local.translate('set_font_sub')),
           trailing: DropdownButton<FontSizePreset>(
             value: fontManager.currentPreset,
-            onChanged: (FontSizePreset? newPreset) {
-              if (newPreset != null) fontManager.changeFontSize(newPreset);
+            onChanged: (FontSizePreset? newPreset) {                                                                                      
+              if (newPreset != null) {
+                fontManager.changeFontSize(newPreset);
+              }
             },
             items: [
-              DropdownMenuItem(value: FontSizePreset.small, child: Text(local.translate('font_small'))),
-              DropdownMenuItem(value: FontSizePreset.medium, child: Text(local.translate('font_medium'))),
-              DropdownMenuItem(value: FontSizePreset.large, child: Text(local.translate('font_large'))),
+              DropdownMenuItem(
+                value: FontSizePreset.small,
+                child: Text(local.translate('font_small')),
+              ),
+              DropdownMenuItem(
+                value: FontSizePreset.medium,
+                child: Text(local.translate('font_medium')),
+              ),
+              DropdownMenuItem(
+                value: FontSizePreset.large,
+                child: Text(local.translate('font_large')),
+              ),
             ],
           ),
         ),
         const Divider(),
         ListTile(
-          leading: const Icon(Icons.language),
+          leading: const Icon(Icons.language, color: Colors.pink),
           title: Text(local.translate('set_lang')),
           subtitle: Text(local.translate('set_lang_sub')),
-          trailing: DropdownButton<Locale>(
-            value: langManager.currentLocale,
-            onChanged: (Locale? newLocale) {
-              if (newLocale != null) langManager.changeLanguage(newLocale);
+          trailing: Switch(
+            value: langManager.currentLocale.languageCode == 'ko',
+            onChanged: (bool value) {
+              langManager.changeLanguage(Locale(value ? 'ko' : 'en'));
             },
-            items: const [
-              DropdownMenuItem(value: Locale('ko'), child: Text("한국어")),
-              DropdownMenuItem(value: Locale('en'), child: Text("English")),
-            ],
           ),
         ),
       ],

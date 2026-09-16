@@ -13,6 +13,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  video_player: ^2.8.2
   
   # AI & Gemini SDK
   google_generative_ai: ^0.4.0
@@ -28,7 +29,7 @@ dependencies:
   # Media & Speech
   speech_to_text: ^7.3.1
   flutter_tts: ^4.2.1
-  model_viewer_plus: ^1.7.0
+  # model_viewer_plus: ^1.7.0
   youtube_player_flutter: ^9.0.0
 
   # XML & News Feed Parsing
